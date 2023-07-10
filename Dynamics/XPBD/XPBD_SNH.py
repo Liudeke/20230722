@@ -2,7 +2,7 @@ import taichi as ti
 import numpy as np
 import taichi.math as tm
 from data.LV1 import meshData
-from Geometry.body import Body
+from Geometry.body_LV import Body
 
 
 @ti.data_oriented

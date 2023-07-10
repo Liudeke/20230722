@@ -1,8 +1,8 @@
 import taichi as ti
 import taichi.math as tm
 import numpy as np
-from Geometry.body import Body
-import Electrophysiology.d_r_LV as ep
+from Geometry.body_LV import Body
+import Electrophysiology.ep_LV as ep
 import Dynamics.XPBD.XPBD_SNH as xpbd
 from data.LV1 import meshData
 # from data.cube import meshData
@@ -112,3 +112,4 @@ if __name__ == "__main__":
         window.show()
 
     # """
+    
