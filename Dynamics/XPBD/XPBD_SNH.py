@@ -45,6 +45,7 @@ class XPBD_SNH_with_active:
         self.normal_bou_endo_face = ti.Vector.field(3, float, shape=(self.num_bou_endo_face,))
         self.get_bou_endo_face_normal()
 
+
         # self.vert_fiber = ti.Vector.field(3, float, shape=(self.num_vertex,))
         # self.vert_fiber.from_numpy(vert_fiber_np)
         # self.F = ti.Matrix.field(3, 3, float, shape=(self.num_element,))
