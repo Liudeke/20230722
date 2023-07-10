@@ -8,7 +8,6 @@ from data.LV1 import meshData
 # from data.cube import meshData
 # from data.heart import meshData
 
-
 def read_data():
     # 顶点位置
     pos_np = np.array(meshData['verts'], dtype=float)
@@ -45,20 +44,35 @@ def read_data():
                 tet_set_np, bou_tag_dirichlet_np, bou_tag_neumann_np)
     return Body_
 
+@ti.kernel
+def get_vert_fiber_field_LV1():
+    for i in body.vertex:
+        vert_fiber_field[2 * i] = body.vertex[i]
+        # vert_fiber = 
+    # for i in body.elements:
+    #     id0, id1, id2, id3 = body.elements[i][0], body.elements[i][1], body.elements[i][2], body.elements[i][3]
+    #     fiber_field_vertex[2 * i] = body.vertex[id0] + body.vertex[id1] + body.vertex[id2] + body.vertex[id3]
+    #     fiber_field_vertex[2 * i] /= 4.0
+    #     fiber = body.tet_fiber[i]
+    #     fiber_field_vertex[2 * i + 1] = fiber_field_vertex[2 * i] + fiber * 0.1
+
 
 if __name__ == "__main__":
     ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True)
 
     body = read_data()
-    body.translation(0., 20.5, 0.)
+    # body.translation(0., 20.5, 0.)
     num_per_tet_set_np = np.array(meshData['sum_tet_set'], dtype=int)
     dynamics_sys = xpbd.XPBD_SNH_with_active(body=body, num_pts_np=num_per_tet_set_np)
     ep_sys = ep.diffusion_reaction(body=body)
     ep_sys.apply_stimulation()
     # print(body.tet_fiber)
 
+    # draw fiber field
+    vert_fiber_field = ti.Vector.field(3, dtype=float, shape=(2 * body.num_vertex))
+    get_vert_fiber_field_LV1()
 
-    # """
+
     # ---------------------------------------------------------------------------- #
     #                                      gui                                     #
     # ---------------------------------------------------------------------------- #
@@ -83,15 +97,16 @@ if __name__ == "__main__":
 
     # initial camera position
 
-    camera.position(0, 40, 50)
-    camera.lookat(0, 10, 0.0)
-    camera.fov(55)
+    camera.position(2.28, 22.6, 34.89)
+    camera.lookat(2.24, 22, 34)
+    # camera.lookat(0., -10.88427617, -10.88427617)
+    # camera.fov(55)
+    camera.up(0., 1., 0.)
 
-    # dynamics_sys.update_Jacobi()
     while window.running:
 
         # ep_sys.update(1)
-        dynamics_sys.update()
+        # dynamics_sys.update()
         # print(body.tet_Ta)
 
         # set the camera, you can move around by pressing 'wasdeq'
@@ -104,12 +119,14 @@ if __name__ == "__main__":
         scene.ambient_light(color=(0.5, 0.5, 0.5))
 
         # draw
-        # scene.particles(pos, radius=0.02, color=(0, 1, 1))
-        scene.mesh(body.vertex, indices=body.surfaces, color=(1.0, 0, 0), two_sided=False)
+        scene.particles(body.vertex, radius=0.02, color=(0, 1, 1))
+        # scene.mesh(body.vertex, indices=body.surfaces, color=(1.0, 0, 0), two_sided=False)
         # scene.mesh(body.vertex, indices=body.surfaces, two_sided=False, per_vertex_color=ep_sys.vertex_color)
+        # scene.line()
         # show the frame
         canvas.scene(scene)
         window.show()
 
-    # """
-    
+    # print(camera.curr_position)
+    # print(camera.curr_lookat)
+    # print(camera.curr_up)

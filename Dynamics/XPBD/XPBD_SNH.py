@@ -7,7 +7,7 @@ from Geometry.body_LV import Body
 
 @ti.data_oriented
 class XPBD_SNH_with_active:
-    def __init__(self, body: Body, num_pts_np: np.ndarray, vert_fiber_np: np.ndarray,
+    def __init__(self, body: Body, num_pts_np: np.ndarray,
                  Youngs_modulus=1000.0, Poisson_ratio=0.49,
                  dt=1. / 60., numSubsteps=1, numPosIters=1):
         self.body = body
@@ -39,9 +39,9 @@ class XPBD_SNH_with_active:
         self.tet_Ta = body.tet_Ta
         self.init()
 
-        self.vert_fiber = ti.Vector.field(3, float, shape=(self.num_vertex,))
-        self.vert_fiber.from_numpy(vert_fiber_np)
-        self.F = ti.Matrix.field(3, 3, float, shape=(self.num_element,))
+        # self.vert_fiber = ti.Vector.field(3, float, shape=(self.num_vertex,))
+        # self.vert_fiber.from_numpy(vert_fiber_np)
+        # self.F = ti.Matrix.field(3, 3, float, shape=(self.num_element,))
 
     @ti.kernel
     def init(self):
