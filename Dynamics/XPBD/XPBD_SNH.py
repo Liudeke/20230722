@@ -7,7 +7,7 @@ from Geometry.body_LV import Body
 
 @ti.data_oriented
 class XPBD_SNH_with_active:
-    def __init__(self, body: Body, num_pts_np: np.ndarray,
+    def __init__(self, body: Body, num_pts_np: np.ndarray, bou_endo_np: np.ndarray,
                  Youngs_modulus=1000.0, Poisson_ratio=0.49,
                  dt=1. / 60., numSubsteps=1, numPosIters=1):
         self.body = body
@@ -39,9 +39,25 @@ class XPBD_SNH_with_active:
         self.tet_Ta = body.tet_Ta
         self.init()
 
+        self.num_bou_endo_face = len(bou_endo_np)
+        self.bou_endo_face = ti.Vector.field(3, int, shape=(self.num_bou_endo_face,))
+        self.bou_endo_face.from_numpy(bou_endo_np)
+        self.normal_bou_endo_face = ti.Vector.field(3, float, shape=(self.num_bou_endo_face,))
+        self.get_bou_endo_face_normal()
+
         # self.vert_fiber = ti.Vector.field(3, float, shape=(self.num_vertex,))
         # self.vert_fiber.from_numpy(vert_fiber_np)
         # self.F = ti.Matrix.field(3, 3, float, shape=(self.num_element,))
+
+    @ti.kernel
+    def get_bou_endo_face_normal(self):
+        for i in self.bou_endo_face:
+            id0, id1, id2 = self.bou_endo_face[i][0], self.bou_endo_face[i][1], self.bou_endo_face[i][2]
+            vert0, vert1, vert2 = self.pos[id0], self.pos[id1], self.pos[id2]
+            p1 = vert1 - vert0
+            p2 = vert2 - vert0
+            n1 = tm.cross(p1, p2)
+            self.normal_bou_endo_face[i] = tm.normalize(n1)
 
     @ti.kernel
     def init(self):
@@ -132,6 +148,15 @@ class XPBD_SNH_with_active:
                     left += self.num_pts[set_id - 1]
                     right += self.num_pts[set_id]
                 self.solve_elem_Gauss_Seidel_GPU(left, right)
+
+        self.solve_dirichlet_boundary()
+
+    @ti.kernel
+    def solve_dirichlet_boundary(self):
+        for i in self.body.vertex:
+            if self.body.bou_tag_dirichlet[i] == 1:
+                self.pos[i] = self.prevPos[i]
+
 
     @ti.kernel
     def solve_elem_Gauss_Seidel_GPU(self, left: int, right: int):

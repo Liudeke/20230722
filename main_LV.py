@@ -44,10 +44,10 @@ def read_data():
                 tet_set_np, bou_tag_dirichlet_np, bou_tag_neumann_np)
     return Body_
 
-@ti.kernel
-def get_vert_fiber_field_LV1():
-    for i in body.vertex:
-        vert_fiber_field[2 * i] = body.vertex[i]
+# @ti.kernel
+# def get_vert_fiber_field_LV1():
+#     for i in body.vertex:
+#         vert_fiber_field[2 * i] = body.vertex[i]
         # vert_fiber = 
     # for i in body.elements:
     #     id0, id1, id2, id3 = body.elements[i][0], body.elements[i][1], body.elements[i][2], body.elements[i][3]
@@ -65,68 +65,70 @@ if __name__ == "__main__":
     num_per_tet_set_np = np.array(meshData['sum_tet_set'], dtype=int)
     dynamics_sys = xpbd.XPBD_SNH_with_active(body=body, num_pts_np=num_per_tet_set_np)
     ep_sys = ep.diffusion_reaction(body=body)
-    ep_sys.apply_stimulation()
+    # ep_sys.apply_stimulation()
     # print(body.tet_fiber)
+    body.set_Ta(600)
 
     # draw fiber field
-    vert_fiber_field = ti.Vector.field(3, dtype=float, shape=(2 * body.num_vertex))
-    get_vert_fiber_field_LV1()
+    # vert_fiber_field = ti.Vector.field(3, dtype=float, shape=(2 * body.num_vertex))
+    # get_vert_fiber_field_LV1()
 
+    bou_endo_np = np.array(meshData['bou_endo'], dtype=int)
+    bou_endo_np = bou_endo_np.reshape((-1, 3))
 
     # ---------------------------------------------------------------------------- #
     #                                      gui                                     #
     # ---------------------------------------------------------------------------- #
+    open_gui = True
     # set parameter
     windowLength = 1024
     lengthScale = min(windowLength, 512)
     light_distance = lengthScale / 25.
 
-    x_min = min(body.vertex[i][0] for i in range(body.vertex.shape[0]))
-    x_max = max(body.vertex[i][0] for i in range(body.vertex.shape[0]))
-    y_min = min(body.vertex[i][1] for i in range(body.vertex.shape[0]))
-    y_max = max(body.vertex[i][1] for i in range(body.vertex.shape[0]))
-    z_min = min(body.vertex[i][2] for i in range(body.vertex.shape[0]))
-    z_max = max(body.vertex[i][2] for i in range(body.vertex.shape[0]))
-    center = np.array([(x_min + x_max) / 2., (y_min + y_max) / 2., (z_min + z_max) / 2.])
+    # for i in range(body.vertex.shape[0]):
+        # body.bou_tag_dirichlet[i] = 0
 
-    # init the window, canvas, scene and camera
-    window = ti.ui.Window("body show", (windowLength, windowLength), vsync=True)
-    canvas = window.get_canvas()
-    scene = ti.ui.Scene()
-    camera = ti.ui.Camera()
+    vert_color = ti.Vector.field(3, float, shape=(body.num_vertex,))
+    for i in range(vert_color.shape[0]):
+        vert_color[i] = tm.vec3(1.0, 0., 0.)
 
-    # initial camera position
+    if open_gui:
+        # init the window, canvas, scene and camera
+        window = ti.ui.Window("body show", (windowLength, windowLength), vsync=True)
+        canvas = window.get_canvas()
+        scene = ti.ui.Scene()
+        camera = ti.ui.Camera()
 
-    camera.position(2.28, 22.6, 34.89)
-    camera.lookat(2.24, 22, 34)
-    # camera.lookat(0., -10.88427617, -10.88427617)
-    # camera.fov(55)
-    camera.up(0., 1., 0.)
+        # initial camera position
+        camera.position(2.28, 22.6, 34.89)
+        camera.lookat(2.24, 22, 34)
+        camera.up(0., 1., 0.)
 
-    while window.running:
+        while window.running:
 
-        # ep_sys.update(1)
-        # dynamics_sys.update()
-        # print(body.tet_Ta)
+            # ep_sys.update(1)
+            dynamics_sys.update()
+            # print(body.tet_Ta)
 
-        # set the camera, you can move around by pressing 'wasdeq'
-        camera.track_user_inputs(window, movement_speed=0.2, hold_key=ti.ui.LMB)
-        scene.set_camera(camera)
+            # set the camera, you can move around by pressing 'wasdeq'
+            camera.track_user_inputs(window, movement_speed=0.2, hold_key=ti.ui.LMB)
+            scene.set_camera(camera)
 
-        # set the light
-        scene.point_light(pos=(-light_distance, 0., light_distance), color=(0.5, 0.5, 0.5))
-        scene.point_light(pos=(light_distance, 0., light_distance), color=(0.5, 0.5, 0.5))
-        scene.ambient_light(color=(0.5, 0.5, 0.5))
+            # set the light
+            scene.point_light(pos=(-light_distance, 0., light_distance), color=(0.5, 0.5, 0.5))
+            scene.point_light(pos=(light_distance, 0., light_distance), color=(0.5, 0.5, 0.5))
+            scene.ambient_light(color=(0.5, 0.5, 0.5))
 
-        # draw
-        scene.particles(body.vertex, radius=0.02, color=(0, 1, 1))
-        # scene.mesh(body.vertex, indices=body.surfaces, color=(1.0, 0, 0), two_sided=False)
-        # scene.mesh(body.vertex, indices=body.surfaces, two_sided=False, per_vertex_color=ep_sys.vertex_color)
-        # scene.line()
-        # show the frame
-        canvas.scene(scene)
-        window.show()
+            # draw
+            # scene.particles(body.vertex, radius=0.02, color=(0, 1, 1))
+            scene.mesh(body.vertex, indices=body.surfaces, per_vertex_color=vert_color, two_sided=False)
+            # scene.mesh(body.vertex, indices=body.surfaces, two_sided=False, per_vertex_color=ep_sys.vertex_color)
+            # scene.line()
 
-    # print(camera.curr_position)
-    # print(camera.curr_lookat)
-    # print(camera.curr_up)
+            # show the frame
+            canvas.scene(scene)
+            window.show()
+
+        # print(camera.curr_position)
+        # print(camera.curr_lookat)
+        # print(camera.curr_up)
