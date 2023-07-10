@@ -1,7 +1,7 @@
 import taichi as ti
 import taichi.math as tm
 import numpy as np
-from Geometry.body import Body
+from Geometry.body_LV import Body
 # from test1 import meshData
 import matplotlib.pyplot as plt
 import time
