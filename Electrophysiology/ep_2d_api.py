@@ -75,10 +75,10 @@ class diffusion_reaction:
         self.init_Vm_w_and_I()
 
         # parameter of Aliec-Panfilov model
-        self.k = 10.0 # 8.0
-        self.a = 0.075 # 0.15
-        self.b = 0.075 # 0.15
-        self.epsilon_0 = 0.04 # 0.002
+        self.k = 8.0 # 10.0
+        self.a = 0.15 # 0.075 # 0.15
+        self.b = 0.15 # 0.075
+        self.epsilon_0 = 0.02 # 0.04 # 0.02
         self.mu_1 = 0.2
         self.mu_2 = 0.3
         self.C_m = 1.0
@@ -464,25 +464,24 @@ class diffusion_reaction:
         for i in self.Vm:
             x = self.body.vertex[i][0]
             y = self.body.vertex[i][1]
-            self.Vm[i] = tm.exp(-4.0 * (x * x + y * y))
-            # self.Vm[i] = 0.0
+            self.Vm[i] = tm.exp(-4.0 * ((x - 1.0) * (x - 1.0) + y * y))
             self.w[i] = 0.0
 
 
 def example1():
-    body1 = body_2d_square(1, 50)
+    body1 = body_2d_square(1, 100)
     ep1 = diffusion_reaction(body=body1)
-    ep1.sigma_f = 0.006 # 1.0
-    ep1.sigma_s = 0.006 # 1.0
+    ep1.sigma_f = 1.0
+    ep1.sigma_s = 1.0
     ep1.init_Vm_w_example1()
 
-    # ep1.get_near_vertex_index(x=0.7, y=0.7)
+    # ep1.get_near_vertex_index(x=0.3, y=0.7)
     # return;
 
     # print(body1.vertex[6929])
 
-    id_vex = 1684
-    tol_time = 25
+    id_vex = 6929
+    tol_time = 16
     cnt = 20
     table_x = np.linspace(0, tol_time, tol_time * cnt + 1)
     vm = ep1.Vm[id_vex]
