@@ -12,7 +12,8 @@ from data.LV1 import meshData
 class Body:
     def __init__(self, vert_np: np.ndarray, tet_np: np.ndarray, edge_np: np.ndarray, tet_fiber_np: np.ndarray,
                  tet_sheet_np: np.ndarray, num_edge_set_np, edge_set_np: np.ndarray, num_tet_set_np,
-                 tet_set_np: np.ndarray, bou_tag_dirichlet_np: np.ndarray, bou_tag_neumann_np: np.ndarray) -> None:
+                 tet_set_np: np.ndarray, bou_tag_dirichlet_np: np.ndarray, bou_tag_neumann_np: np.ndarray,
+                 bou_endo_np: np.ndarray, bou_epi_np: np.ndarray) -> None:
         # len(vertex[0]) = 3, len(vertex) = num_vert
         self.density = 1000.0
         self.num_vertex = len(vert_np)
@@ -53,6 +54,14 @@ class Body:
         # bou_tag2: neumann boundary condition
         self.bou_tag_neumann = ti.field(int, shape=(self.num_vertex,))
         self.bou_tag_neumann.from_numpy(bou_tag_neumann_np)
+
+        self.num_bou_endo_face = len(bou_endo_np)
+        self.bou_endo = ti.Vector.field(3, int, shape=(self.num_bou_endo_face,))
+        self.bou_endo.from_numpy(bou_endo_np)
+
+        self.num_bou_epi_face = len(bou_epi_np)
+        self.bou_epi = ti.Vector.field(3, int, shape=(self.num_bou_epi_face,))
+        self.bou_epi.from_numpy(bou_epi_np)
 
         # variables for visualization
         surfaces = geo.get_surface_from_tet(vertex=vert_np, elements=tet_np)

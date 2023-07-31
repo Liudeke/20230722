@@ -475,13 +475,8 @@ class diffusion_reaction:
             if (vert[i][0] - 8.5) * (vert[i][0] - 8.5) + (vert[i][1] - 5.) * (vert[i][1] - 5.) + \
                     vert[i][2] * vert[i][2] < (1. / 1.):
                 self.I_ext[i] = 1.0
-            # if (vert[i][0] - 8.5) * (vert[i][0] - 8.5) + (vert[i][1] - 25.5) * (vert[i][1] - 25.5) + \
-            #         vert[i][2] * vert[i][2] < (1. / 1.):
-            #     self.I_ext[i] = 1.0
-            # if (vert[i][0]) * (vert[i][0]) + (vert[i][1]) * (vert[i][1]) + vert[i][2] * vert[i][2] < (1. / 1.):
-            #     self.I_ext[i] = 1.0
-            # if (vert[i][0]) * (vert[i][0]) + (vert[i][1] + 20) * (vert[i][1] + 20) + \
-            #         vert[i][2] * vert[i][2] < (5. / 1.):
+            # if (vert[i][0] - 8.5) * (vert[i][0] - 8.5) + (vert[i][1] + 15.) * (vert[i][1] + 15.) + \
+            #                 vert[i][2] * vert[i][2] < (1. / 1.):
             #     self.I_ext[i] = 1.0
 
     @ti.kernel

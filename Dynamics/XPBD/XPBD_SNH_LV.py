@@ -7,9 +7,9 @@ from Geometry.body_LV import Body
 
 @ti.data_oriented
 class XPBD_SNH_with_active:
-    def __init__(self, body: Body, num_pts_np: np.ndarray, bou_endo_np: np.ndarray,
+    def __init__(self, body: Body, num_pts_np: np.ndarray,
                  Youngs_modulus=1000.0, Poisson_ratio=0.49,
-                 dt=1. / 60., numSubsteps=1, numPosIters=1):
+                 dt=1. / 6., numSubsteps=1, numPosIters=1):
         self.body = body
         self.num_vertex = self.body.num_vertex
         self.num_element = self.body.num_tet
@@ -39,11 +39,15 @@ class XPBD_SNH_with_active:
         self.tet_Ta = body.tet_Ta
         self.init()
 
-        self.num_bou_endo_face = len(bou_endo_np)
-        self.bou_endo_face = ti.Vector.field(3, int, shape=(self.num_bou_endo_face,))
-        self.bou_endo_face.from_numpy(bou_endo_np)
+        self.num_bou_endo_face = self.body.num_bou_endo_face
+        self.bou_endo_face = self.body.bou_endo
         self.normal_bou_endo_face = ti.Vector.field(3, float, shape=(self.num_bou_endo_face,))
-        self.get_bou_endo_face_normal()
+
+        self.num_bou_epi_face = self.body.num_bou_epi_face
+        self.bou_epi_face = self.body.bou_epi
+        self.normal_bou_epi_face = ti.Vector.field(3, float, shape=(self.num_bou_epi_face,))
+        self.get_bou_face_normal()
+        self.p_endo_lv = 15          # 15.0
 
 
         # self.vert_fiber = ti.Vector.field(3, float, shape=(self.num_vertex,))
@@ -51,7 +55,7 @@ class XPBD_SNH_with_active:
         # self.F = ti.Matrix.field(3, 3, float, shape=(self.num_element,))
 
     @ti.kernel
-    def get_bou_endo_face_normal(self):
+    def get_bou_face_normal(self):
         for i in self.bou_endo_face:
             id0, id1, id2 = self.bou_endo_face[i][0], self.bou_endo_face[i][1], self.bou_endo_face[i][2]
             vert0, vert1, vert2 = self.pos[id0], self.pos[id1], self.pos[id2]
@@ -59,6 +63,14 @@ class XPBD_SNH_with_active:
             p2 = vert2 - vert0
             n1 = tm.cross(p1, p2)
             self.normal_bou_endo_face[i] = tm.normalize(n1)
+
+        for i in self.bou_epi_face:
+            id0, id1, id2 = self.bou_epi_face[i][0], self.bou_epi_face[i][1], self.bou_epi_face[i][2]
+            vert0, vert1, vert2 = self.pos[id0], self.pos[id1], self.pos[id2]
+            p1 = vert1 - vert0
+            p2 = vert2 - vert0
+            n1 = tm.cross(p1, p2)
+            self.normal_bou_epi_face[i] = tm.normalize(n1)
 
     @ti.kernel
     def init(self):
@@ -78,7 +90,7 @@ class XPBD_SNH_with_active:
             self.invMass[i] = 1.0 / self.mass[i]
 
     def update(self):
-        # self.update_Ta()
+        self.update_Ta()
         for _ in range(self.numSubsteps):
             self.sub_step()
 
@@ -116,6 +128,20 @@ class XPBD_SNH_with_active:
     @ti.kernel
     def preSolve(self):
         pos, vel = ti.static(self.pos, self.vel)
+        for i in self.f_ext:
+            self.f_ext[i] = 0.0
+
+        for i in self.bou_endo_face:
+            id0, id1, id2 = self.bou_endo_face[i][0], self.bou_endo_face[i][1], self.bou_endo_face[i][2]
+            vert0, vert1, vert2 = self.pos[id0], self.pos[id1], self.pos[id2]
+            p1 = vert1 - vert0
+            p2 = vert2 - vert0
+            n1 = tm.cross(p1, p2)
+            self.normal_bou_endo_face[i] = tm.normalize(n1)
+            self.f_ext[id0] += -1.0 * self.p_endo_lv * self.normal_bou_endo_face[i] / 3.0
+            self.f_ext[id1] += -1.0 * self.p_endo_lv * self.normal_bou_endo_face[i] / 3.0
+            self.f_ext[id2] += -1.0 * self.p_endo_lv * self.normal_bou_endo_face[i] / 3.0
+
         for i in self.pos:
             self.prevPos[i] = pos[i]
             vel[i] += self.h * self.f_ext[i] * self.invMass[i]
@@ -156,7 +182,14 @@ class XPBD_SNH_with_active:
     def solve_dirichlet_boundary(self):
         for i in self.body.vertex:
             if self.body.bou_tag_dirichlet[i] == 1:
-                self.pos[i] = self.prevPos[i]
+                self.pos[i][1] = self.prevPos[i][1]
+                # self.pos[i] = self.prevPos[i]
+
+        # for i in self.body.bou_epi:
+        #     id0, id1, id2 = self.body.bou_epi[i][0], self.body.bou_epi[i][1], self.body.bou_epi[i][2]
+        #     self.pos[id0] = self.prevPos[id0]
+        #     self.pos[id1] = self.prevPos[id1]
+        #     self.pos[id2] = self.prevPos[id2]
 
 
     @ti.kernel
@@ -268,7 +301,8 @@ class XPBD_SNH_with_active:
             g[i, 3] += dIff1 * (C_inv * ir[i][2, 1])
             g[i, 3] += dIff2 * (C_inv * ir[i][2, 2])
 
-            self.applyToElem(i, C, 1.0 / self.body.tet_Ta[i])
+            if self.body.tet_Ta[i] > 0:
+                self.applyToElem(i, C, 1.0 / self.body.tet_Ta[i])
 
     @ti.func
     def applyToElem(self, elemNr, C, compliance):
