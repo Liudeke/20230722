@@ -471,8 +471,8 @@ class diffusion_reaction:
         A = self.Me[0] + self.Ke[0] * dt
         x = tm.vec3(self.cg_x[0], self.cg_x[1], self.cg_x[2])
         b = self.Me[0] @ tm.vec3(self.Vm[0], self.Vm[1], self.Vm[2])
-        print(A @ x)
-        print(b)
+        # print(A @ x)
+        # print(b)
         self.cgUpdateVm()
 
     def update_Vm(self, dt):
@@ -514,50 +514,83 @@ class diffusion_reaction:
             self.Vm[i] = tm.exp(-4.0 * ((x - 1.0) * (x - 1.0) + y * y))
             self.w[i] = 0.0
 
+    @ti.kernel
+    def init_Vm_w_experiment2(self):
+        for i in self.Vm:
+            x = self.body.vertex[i][0]
+            y = self.body.vertex[i][1]
+            if x >= 0 and x <= 1.25 and y >= 0 and y <= 1.25:
+                self.Vm[i] = 1.0
+            else:
+                self.Vm[i] = 0.0
+            if x >= 0 and x <= 1.25 and y >= 1.25 and y <= 2.5:
+                self.w[i] = 0.1
+            elif x >= 1.25 and x <= 2.5 and y >= 0 and y <= 2.5:
+                self.w[i] = 0.1
+            else:
+                self.w[i] = 0.0
+
 
 def example1():
-    body1 = body_2d_square(1, 100)
+    body1 = body_2d_square(2.5, 100)
     ep1 = diffusion_reaction(body=body1)
     ep1.sigma_f = 1.0
     ep1.sigma_s = 1.0
-    ep1.init_Vm_w_example1()
-    # ep1.get_near_vertex_index(x=0.3, y=0.7)
-    # print(body1.vertex[6929])
-    # print(body1.vertex[6930])
-    # print(body1.vertex[7029])
-    # print(body1.vertex[7030])
+    ep1.init_Vm_w_experiment2()
 
-    id_vex = 28058
-    tol_time = 16 * 2
+    tol_time = 1000
     cnt = 10
-    table_x = np.linspace(0, tol_time, tol_time * cnt + 1)
-    # vm = ep1.Vm[id_vex]
-    # table_y = np.array(vm)
-    # print(ep1.body.vertex[id_vex])
+
+    n = 100
+    x = np.linspace(0, 2.5, n)
+    y = np.linspace(0, 2.5, n)
+    X, Y = np.meshgrid(x, y)
+    Z = np.zeros((n, n))
+
+    cur_time = 0.0
+    target_time = 0.0
+    if abs(cur_time - target_time) < 1e-6:
+        for idi in range(n):
+            for idj in range(n):
+                idv = idi * n + idj
+                Z[idi, idj] = ep1.Vm[idv]
+
+        plt.subplot(2,3,1)
+        # contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
+        # plt.clabel(contours, inline=True, fontsize=8)
+        
+        plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                cmap='jet', alpha=1.0, vmin=0, vmax=1)
+        # plt.colorbar()
+        # plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
+        # plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
+        # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
 
     dt = 1.0 / cnt
-    ep1.update_Vm(dt)
-    # A = ep1.Me[0] + ep1.Ke[0] * dt
-    # b = ep1.
-    # print(ep1.Me[0] + ep1.Ke[0] * dt)
-    # print()
-    # ep1.update_Vm(dt)
-    # print(ep1.Vm[id_vex])
-    # for tt in range(tol_time):
-    #     for st in range(cnt):
-    #         ep1.update_Vm(dt)
-    #         # print(ep1.Vm[id_vex])
-    #         vm = ep1.Vm[id_vex]
-    #         table_y = np.append(table_y, vm)
-    #         # print(vm)
-    # # print(ep1.Me[1])
-    # plt.plot(table_x, table_y)
+    flag = False
+    for tt in range(tol_time):
+        for st in range(cnt):
+            ep1.update_Vm(dt)
+            cur_time += dt
+            if abs(cur_time - 50) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(2,3,2)
+                
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+                plt.colorbar()
+                plt.show()
+                return
+            
     # plt.show()
-    # 0.09792935848236084
-    # 0.12306878715753555
 
 
 if __name__ == "__main__":
-    ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
+    # ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
+    ti.init(arch=ti.cpu)
 
     example1()
