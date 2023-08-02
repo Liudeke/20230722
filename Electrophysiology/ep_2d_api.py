@@ -2,6 +2,7 @@ import taichi as ti
 import taichi.math as tm
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import time
 
 @ti.data_oriented
@@ -75,10 +76,10 @@ class diffusion_reaction:
         self.init_Vm_w_and_I()
 
         # parameter of Aliec-Panfilov model
-        self.k = 8.0 # 10.0
-        self.a = 0.15 # 0.075 # 0.15
-        self.b = 0.15 # 0.075
-        self.epsilon_0 = 0.02 # 0.04 # 0.02
+        self.k = 8.0  # 10.0
+        self.a = 0.15  # 0.075 # 0.15
+        self.b = 0.15  # 0.075
+        self.epsilon_0 = 0.04  # 0.04 # 0.02
         self.mu_1 = 0.2
         self.mu_2 = 0.3
         self.C_m = 1.0
@@ -468,7 +469,53 @@ class diffusion_reaction:
             self.w[i] = 0.0
 
 
-def example1():
+def example1_1():
+    body1 = body_2d_square(1, 100)
+    ep1 = diffusion_reaction(body=body1)
+    ep1.sigma_f = 1.0
+    ep1.sigma_s = 1.0
+    ep1.init_Vm_w_example1()
+
+    id_vex = 6929
+    tol_time = 16
+    cnt = 20.0
+    vm = ep1.Vm[id_vex]
+
+    n = 100
+    x = np.linspace(0, 1, n)
+    y = np.linspace(0, 1, n)
+    X, Y = np.meshgrid(x, y)
+    Z = np.zeros((n, n))
+
+    for idi in range(n):
+        for idj in range(n):
+            idv = idi * n + idj
+            Z[idi, idj] = ep1.Vm[idv]
+
+    contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
+    plt.clabel(contours, inline=True, fontsize=8)
+
+    plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+               cmap='jet', alpha=1.0)
+    plt.colorbar()
+    plt.plot(0.3, 0.7, 'ko')
+    plt.show()
+    return
+
+    cur_time = 0.0
+    target_time = 0.0
+    # if cur_time == target_time:
+
+    dt = 1.0 / cnt
+    for tt in range(tol_time):
+        for st in range(cnt):
+            ep1.update_Vm(dt)
+            # print(ep1.Vm[id_vex])
+            vm = ep1.Vm[id_vex]
+            # table_y = np.append(table_y, vm)
+
+
+def example1_2():
     body1 = body_2d_square(1, 100)
     ep1 = diffusion_reaction(body=body1)
     ep1.sigma_f = 1.0
@@ -479,38 +526,37 @@ def example1():
     # return;
 
     # print(body1.vertex[6929])
-
     id_vex = 6929
     tol_time = 16
     cnt = 20
     table_x = np.linspace(0, tol_time, tol_time * cnt + 1)
     vm = ep1.Vm[id_vex]
+
     table_y = np.array(vm)
-    # print(ep1.body.vertex[id_vex])
 
     dt = 1.0 / cnt
-    # ep1.update_Vm(dt)
-
-    # A = ep1.Me[0] + ep1.Ke[0] * dt
-    # b = ep1.
-    # print(ep1.Me[0] + ep1.Ke[0] * dt)
-    # print()
-    # ep1.update_Vm(dt)
-    # print(ep1.Vm[id_vex])
     for tt in range(tol_time):
         for st in range(cnt):
             ep1.update_Vm(dt)
             # print(ep1.Vm[id_vex])
             vm = ep1.Vm[id_vex]
             table_y = np.append(table_y, vm)
-            # print(vm)
-    # print(ep1.Me[1])
-    plt.plot(table_x, table_y)
-    plt.show()
 
+    x_RV = np.array([0.0, 0.5, 2.5, 7.0, 10.0, 14.0])
+    y_RV = np.array([0.0194, 0.248, 0.953, 0.8598, 0.481, 0.0])
+    plt.xlabel(r"$\mathrm{t}$")
+    plt.ylabel(r"$\mathrm{V_m}$")
+    ax = plt.subplot(111)
+    ax.plot(table_x, table_y, label='ours')
+    ax.plot(x_RV, y_RV, 'o', label='Ratti')
+    ax.legend(loc='best')
+    # plt.plot(table_x, table_y, x_RV, y_RV, 'o')
+    # plt.plot(x_RV, y_RV, 'o')
+    plt.show()
 
 
 if __name__ == "__main__":
     # ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
     ti.init(arch=ti.cpu)
-    example1()
+    example1_1()
+    # example1_2()
