@@ -31,7 +31,7 @@ class body_2d_square:
             j = id_v % self.n
             i = (id_v - j) // self.n
             self.vertex[id_v] = tm.vec2(j * len_of_elem, i * len_of_elem)
-            if i == 0 or i == self.n or j == 0 or j == self.n:
+            if i == 0 or i == self.n - 1 or j == 0 or j == self.n - 1:
                 self.is_dirichlet_bou[id_v] = 1
             else:
                 self.is_dirichlet_bou[id_v] = 0
@@ -106,11 +106,15 @@ class diffusion_reaction_FN:
         self.cg_A = ti.field(float, shape=(self.body.num_vertex, self.body.num_vertex))
 
         # use API to solver cg
-        nv = (self.body.n - 2) * (self.body.n - 2)
-        self.api_A = ti.linalg.SparseMatrixBuilder(nv, nv, max_num_triplets=nv * nv * 20)
-        self.api_M = ti.linalg.SparseMatrixBuilder(nv, nv, max_num_triplets=nv * nv * 20)
-        self.api_Vm = ti.ndarray(ti.f32, nv)
-        self.api_b = ti.ndarray(ti.f32, nv)
+        self.nva = self.body.n * self.body.n
+        self.nv = (self.body.n - 2) * (self.body.n - 2)
+        self.hash_v = ti.field(int, shape=(self.nv,))
+        self.hash_v_r = ti.field(int, shape=(self.nva,))
+        self.init_hash()
+        self.api_A = ti.linalg.SparseMatrixBuilder(self.nv, self.nv, max_num_triplets=self.nv * self.nv * 20)
+        self.api_M = ti.linalg.SparseMatrixBuilder(self.nv, self.nv, max_num_triplets=self.nv * self.nv * 20)
+        self.api_Vm = ti.ndarray(ti.f32, self.nv)
+        self.api_b = ti.ndarray(ti.f32, self.nv)
 
         # vertex color
         self.vertex_color = ti.Vector.field(3, float, self.body.num_vertex)
@@ -175,6 +179,16 @@ class diffusion_reaction_FN:
         for i in range(self.body.num_tet):
             self.fiber[i] = self.F[i] @ self.body.tet_fiber[i]
             self.sheet[i] = self.F[i] @ self.body.tet_sheet[i]
+
+    def init_hash(self):
+        idv = 0
+        for i in range(self.body.num_vertex):
+            if self.body.is_dirichlet_bou[i] == 0:
+                self.hash_v[idv] = i
+                self.hash_v_r[i] = idv
+                idv += 1
+            else:
+                self.hash_v_r[i] = -1
 
     @ti.kernel
     def calculate_reaction(self, dt: float):
@@ -253,57 +267,8 @@ class diffusion_reaction_FN:
             # self.Ke[i] = J * ti.abs(self.Be[i].determinant()) * self.DM[i] @ A @ A.transpose()
             # self.D[i] = J * self.F[i].inverse() @ self.DM[i] @ self.F[i].inverse().transpose()
 
-    @ti.kernel
-    def compute_RHS(self):
-        for i in self.cg_b:
-            self.cg_b[i] = 0.0
-        # rhs = b = f * dt + M * u(t), here, f = 0
-        for i in range(self.body.num_tet):
-            id0, id1, id2 = (self.body.elements[i][0], self.body.elements[i][1], self.body.elements[i][2])
-            self.cg_b[id0] += (self.Me[i][0, 0] * self.Vm[id0] + self.Me[i][0, 1] * self.Vm[id1] +
-                               self.Me[i][0, 2] * self.Vm[id2])
-            self.cg_b[id1] += (self.Me[i][1, 0] * self.Vm[id0] + self.Me[i][1, 1] * self.Vm[id1] +
-                               self.Me[i][1, 2] * self.Vm[id2])
-            self.cg_b[id2] += (self.Me[i][2, 0] * self.Vm[id0] + self.Me[i][2, 1] * self.Vm[id1] +
-                               self.Me[i][2, 2] * self.Vm[id2])
-
-    @ti.func
-    def A_mult_x(self, dt, dst, src):
-        # lhs = Ax = (M + K * dt) * u(t+1)
-        for i in range(self.body.num_vertex):
-            dst[i] = 0.0
-
-        for i in range(self.body.num_tet):
-            id0, id1, id2 = (self.body.elements[i][0], self.body.elements[i][1], self.body.elements[i][2])
-            dst[id0] += (self.Me[i][0, 0] * src[id0] + self.Me[i][0, 1] * src[id1] +
-                         self.Me[i][0, 2] * src[id2])
-            dst[id1] += (self.Me[i][1, 0] * src[id0] + self.Me[i][1, 1] * src[id1] +
-                         self.Me[i][1, 2] * src[id2])
-            dst[id2] += (self.Me[i][2, 0] * src[id0] + self.Me[i][2, 1] * src[id1] +
-                         self.Me[i][2, 2] * src[id2])
-
-            dst[id0] += (self.Ke[i][0, 0] * src[id0] + self.Ke[i][0, 1] * src[id1] +
-                         self.Ke[i][0, 2] * src[id2]) * dt
-            dst[id1] += (self.Ke[i][1, 0] * src[id0] + self.Ke[i][1, 1] * src[id1] +
-                         self.Ke[i][1, 2] * src[id2]) * dt
-            dst[id2] += (self.Ke[i][2, 0] * src[id0] + self.Ke[i][2, 1] * src[id1] +
-                         self.Ke[i][2, 2] * src[id2]) * dt
-
-    @ti.func
-    def dot(self, v1, v2):
-        result = 0.0
-        for i in range(self.body.num_vertex):
-            result += v1[i] * v2[i]
-        return result
-
-    @ti.kernel
-    def cgUpdateVm(self):
-        for i in self.Vm:
-            self.Vm[i] = self.cg_x[i]
-
     def calculate_diffusion(self, dt):
         self.calculate_M_and_K()
-        self.compute_RHS()
 
         # TODO: change CG from n * n to (n-m)*(n-m)
         self.assemble_A(self.api_A, dt)
@@ -328,7 +293,10 @@ class diffusion_reaction_FN:
                 idx[k] = elem[i][k]
             for n in ti.static(range(3)):
                 for m in ti.static(range(3)):
-                    A[idx[n], idx[m]] += (self.Me[i][n, m] + self.Ke[i][n, m] * dt)
+                    if self.body.is_dirichlet_bou[idx[n]] == 0 and self.body.is_dirichlet_bou[idx[m]] == 0:
+                        idvn = self.hash_v_r[idx[n]]
+                        idvm = self.hash_v_r[idx[m]]
+                        A[idvn, idvm] += (self.Me[i][n, m] + self.Ke[i][n, m] * dt)
 
     @ti.kernel
     def assemble_M(self, M: ti.types.sparse_matrix_builder()):
@@ -339,17 +307,20 @@ class diffusion_reaction_FN:
                 idx[k] = elem[i][k]
             for n in ti.static(range(3)):
                 for m in ti.static(range(3)):
-                    M[idx[n], idx[m]] += self.Me[i][n, m]
+                    if self.body.is_dirichlet_bou[idx[n]] == 0 and self.body.is_dirichlet_bou[idx[m]] == 0:
+                        idvn = self.hash_v_r[idx[n]]
+                        idvm = self.hash_v_r[idx[m]]
+                        M[idvn, idvm] += self.Me[i][n, m]
 
     @ti.kernel
     def copy_Vm(self, des: ti.types.ndarray(), source: ti.template()):
         for i in range(self.body.num_vertex):
-            des[i] = source[i]
+            des[i] = source[self.hash_v[i]]
 
     @ti.kernel
     def updateVm_api(self, dv: ti.types.ndarray()):
         for i in dv:
-            self.Vm[i] = dv[i]
+            self.Vm[self.hash_v[i]] = dv[i]
 
 
     def update_Vm(self, dt):
@@ -357,39 +328,18 @@ class diffusion_reaction_FN:
         self.calculate_diffusion(dt)
         self.calculate_reaction(dt * 0.5)
 
-    def get_near_vertex_index(self, x: float, y: float) -> int:
-        vert = ti.static(self.body.vertex)
-        res = 0
-        for i in range(self.body.num_vertex):
-            if (vert[i][0] - x)**2 + (vert[i][1] - y)**2 < 1e-3:
-                res = i
-                print(i)
-        return res
-
-    def update(self, sub_steps):
-        dt = 1. / 1.29 / 6. / sub_steps
-        # dt = 1. / 60. / sub_steps
-        for _ in range(sub_steps):
-            self.update_Vm(dt)
-        self.update_color()
-
-    @ti.kernel
-    def update_color(self):
-        for i in self.vertex_color:
-            self.vertex_color[i] = tm.vec3([self.Vm[i], self.Vm[i], 1])
-
     @ti.kernel
     def init_Vm_w_experiment2(self):
         for i in self.Vm:
             x = self.body.vertex[i][0]
             y = self.body.vertex[i][1]
-            if x >= 0 and x <= 1.25 and y >= 0 and y <= 1.25:
+            if x > 0 and x <= 1.25 and y > 0 and y < 1.25:
                 self.Vm[i] = 1.0
             else:
                 self.Vm[i] = 0.0
-            if x >= 0 and x <= 1.25 and y >= 1.25 and y <= 2.5:
+            if x > 0 and x <= 1.25 and y >= 1.25 and y < 2.5:
                 self.w[i] = 0.1
-            elif x >= 1.25 and x <= 2.5 and y >= 0 and y <= 2.5:
+            elif x >= 1.25 and x < 2.5 and y > 0 and y < 2.5:
                 self.w[i] = 0.1
             else:
                 self.w[i] = 0.0
@@ -398,11 +348,9 @@ class diffusion_reaction_FN:
 def experiment2():
     body1 = body_2d_square(2.5, 100)
     ep1 = diffusion_reaction_FN(body=body1)
-    # ep1.sigma_f = 1.0
-    # ep1.sigma_s = 1.0
     ep1.init_Vm_w_experiment2()
 
-    tol_time = 250
+    tol_time = 500
     cnt = 10
 
     n = 100
@@ -419,15 +367,10 @@ def experiment2():
                 idv = idi * n + idj
                 Z[idi, idj] = ep1.Vm[idv]
 
-        plt.subplot(2,3,1)
-        # contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
-        # plt.clabel(contours, inline=True, fontsize=8)
-        
+        plt.subplot(2,3,1)        
         plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
                 cmap='jet', alpha=1.0, vmin=0, vmax=1)
         # plt.colorbar()
-        # plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
-        # plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
         # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
 
     dt = 1.0 / cnt
@@ -442,15 +385,10 @@ def experiment2():
                         idv = idi * n + idj
                         Z[idi, idj] = ep1.Vm[idv]
 
-                plt.subplot(2,3,2)
-                # contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
-                # plt.clabel(contours, inline=True, fontsize=8)
-                
+                plt.subplot(2,3,2)                
                 plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
                         cmap='jet', alpha=1.0)  # , vmin=0, vmax=1
                 plt.colorbar()
-                # plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
-                # plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
                 # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
                 plt.show()
                 return

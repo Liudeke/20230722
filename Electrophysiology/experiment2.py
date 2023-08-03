@@ -46,7 +46,7 @@ class body_2d_square:
             j = id_v % self.n
             i = (id_v - j) // self.n
             self.vertex[id_v] = tm.vec2(j * len_of_elem, i * len_of_elem)
-            if i == 0 or i == self.n or j == 0 or j == self.n:
+            if i == 0 or i == self.n - 1 or j == 0 or j == self.n - 1:
                 self.is_dirichlet_bou[id_v] = 1
             else:
                 self.is_dirichlet_bou[id_v] = 0

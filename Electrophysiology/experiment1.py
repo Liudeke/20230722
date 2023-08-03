@@ -433,12 +433,7 @@ class diffusion_reaction:
         self.calculate_reaction(dt * 0.5)
         self.calculate_diffusion(dt)
         self.calculate_reaction(dt * 0.5)
-        # self.calculate_reaction(dt)
-        # self.calculate_diffusion(dt)
-        # self.calculate_diffusion(dt)
-        # self.calculate_reaction(dt)
 
-    # @ti.kernel
     def get_near_vertex_index(self, x: float, y: float) -> int:
         vert = ti.static(self.body.vertex)
         res = 0
@@ -661,6 +656,8 @@ def test():
     ep1.sigma_s = 1.0e-1
     ep1.epsilon_0 = 0.01
     ep1.init_Vm_w_experiment2()
+    ep1.update_Vm(dt=1)
+    return
 
     tol_time = 100
     cnt = 10
