@@ -24,21 +24,6 @@ class body_2d_square:
 
         self.Vm = ti.field(float, shape=(self.num_vertex,))
 
-        # self.Dm = ti.Matrix.field(3, 3, float, shape=(self.num_tet,))
-        # self.DmInv = ti.Matrix.field(3, 3, float, shape=(self.num_tet,))
-        # self.DmInvT = ti.Matrix.field(3, 3, float, shape=(self.num_tet,))
-        # self.init_DmInv()
-        #
-        # self.Vm = ti.field(float, shape=(self.num_vertex,))
-        #
-        # # volume
-        # self.volume = ti.field(float, self.num_tet)
-        # self.init_volume()
-        #
-        # self.tet_Ta = ti.field(float, shape=(self.num_tet,))
-        # self.ver_Ta = ti.field(float, shape=(self.num_vertex,))
-        # self.init_electrophysiology()
-
     @ti.kernel
     def init_vertex_and_elem(self):
         len_of_elem = self.len_of_square / (self.n - 1)
@@ -121,7 +106,7 @@ class diffusion_reaction_FN:
         self.cg_A = ti.field(float, shape=(self.body.num_vertex, self.body.num_vertex))
 
         # use API to solver cg
-        nv = self.body.num_vertex
+        nv = (self.body.n - 2) * (self.body.n - 2)
         self.api_A = ti.linalg.SparseMatrixBuilder(nv, nv, max_num_triplets=nv * nv * 20)
         self.api_M = ti.linalg.SparseMatrixBuilder(nv, nv, max_num_triplets=nv * nv * 20)
         self.api_Vm = ti.ndarray(ti.f32, nv)
@@ -311,53 +296,6 @@ class diffusion_reaction_FN:
             result += v1[i] * v2[i]
         return result
 
-    # cg #
-    # --------------------------------------------------------------------------------------------------- #
-    @ti.kernel
-    def cg_before_ite(self, dt: float) -> float:
-        for i in range(self.body.num_vertex):
-            self.cg_x[i] = self.Vm[i]
-        self.A_mult_x(dt, self.cg_Ax, self.cg_x)
-
-        for i in range(self.body.num_vertex):
-            # r = b - A @ x
-            self.cg_r[i] = self.cg_b[i] - self.cg_Ax[i]
-            # d = r
-            self.cg_d[i] = self.cg_r[i]
-
-        delta_new = self.dot(self.cg_r, self.cg_r)
-        return delta_new
-
-    @ti.kernel
-    def cg_run_iteration(self, dt: float, delta: float) -> float:
-        delta_new = delta
-        # q = A @ d
-        self.A_mult_x(dt, self.cg_Ad, self.cg_d)
-        # alpha = delta_new / d.dot(q)
-        alpha = delta_new / self.dot(self.cg_d, self.cg_Ad)
-
-        for i in range(self.body.num_vertex):
-            # x = x + alpha * d
-            self.cg_x[i] += alpha * self.cg_d[i]
-            # r = b - A @ x || r = r - alpha * q
-            self.cg_r[i] -= alpha * self.cg_Ad[i]
-        delta_old = delta_new
-        delta_new = self.dot(self.cg_r, self.cg_r)
-        beta = delta_new / delta_old
-        for i in range(self.body.num_vertex):
-            # d = r + beta * d
-            self.cg_d[i] = self.cg_r[i] + beta * self.cg_d[i]
-        return delta_new
-
-    def cg(self, dt: float):
-        delta_new = self.cg_before_ite(dt)
-        delta_0 = delta_new
-        # ite, iteMax = 0, 100
-        ite, iteMax = 0, 200
-        while ite < iteMax and delta_new > (self.cg_epsilon**2) * delta_0:
-            delta_new = self.cg_run_iteration(dt, delta_new)
-            ite += 1
-
     @ti.kernel
     def cgUpdateVm(self):
         for i in self.Vm:
@@ -366,7 +304,8 @@ class diffusion_reaction_FN:
     def calculate_diffusion(self, dt):
         self.calculate_M_and_K()
         self.compute_RHS()
-        # self.cg(dt)
+
+        # TODO: change CG from n * n to (n-m)*(n-m)
         self.assemble_A(self.api_A, dt)
         A = self.api_A.build()
         self.assemble_M(self.api_M)
@@ -379,17 +318,6 @@ class diffusion_reaction_FN:
         solver.factorize(A)
         dv = solver.solve(self.api_b)
         self.updateVm_api(dv)
-
-        # test
-        # Ax = A @ dv
-        # b = self.api_b
-        # eps = 0.0
-        # for i in range(self.body.num_vertex):
-        #     eps += (Ax[i] - b[i]) * (Ax[i] - b[i])
-        # print(eps)
-
-
-        # self.cgUpdateVm()
 
     @ti.kernel
     def assemble_A(self, A: ti.types.sparse_matrix_builder(), dt: float):
