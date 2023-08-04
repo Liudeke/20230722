@@ -323,13 +323,14 @@ class diffusion_reaction_FN:
         for i in self.Vm:
             x = self.body.vertex[i][0]
             y = self.body.vertex[i][1]
-            if x > 0 and x <= 1.25 and y > 0 and y < 1.25:
+            # TODO: 2.5的边界处可能存在数值误差，有待检查
+            if x > 0 and x <= 1.25 and y > 0 and y < 1.25 and self.body.is_dirichlet_bou[i] == 0:
                 self.Vm[i] = 1.0
             else:
                 self.Vm[i] = 0.0
-            if x > 0 and x <= 1.25 and y >= 1.25 and y < 2.5:
+            if x > 0 and x <= 1.25 and y >= 1.25 and y < 2.5 and self.body.is_dirichlet_bou[i] == 0:
                 self.w[i] = 0.1
-            elif x >= 1.25 and x < 2.5 and y >= 1.25 and y < 2.5:
+            elif x >= 1.25 and x < 2.5 and y >= 1.25 and y < 2.5 and self.body.is_dirichlet_bou[i] == 0:
                 self.w[i] = 0.1
             else:
                 self.w[i] = 0.0
@@ -340,7 +341,7 @@ def experiment2():
     ep1 = diffusion_reaction_FN(body=body1)
     ep1.init_Vm_w_experiment2()
 
-    tol_time = 500
+    tol_time = 1500
     cnt = 10
 
     n = 100
@@ -351,18 +352,216 @@ def experiment2():
 
     cur_time = 0.0
     target_time = 0.0
+    sub_plot_row = 1
+    sub_plot_col = 7
     if abs(cur_time - target_time) < 1e-6:
         for idi in range(n):
             for idj in range(n):
                 idv = idi * n + idj
                 Z[idi, idj] = ep1.Vm[idv]
 
-        plt.subplot(2,3,1)        
+        plt.subplot(sub_plot_row, sub_plot_col, 1)        
         plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
                 cmap='jet', alpha=1.0, vmin=0, vmax=1)
-        # plt.colorbar()
-        # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
 
+    dt = 1.0 / cnt
+    for tt in range(tol_time):
+        for st in range(cnt):
+            ep1.update_Vm(dt)
+            cur_time += dt
+            if abs(cur_time - 250.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 2)                 
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+                
+            if abs(cur_time - 500.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 3)
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+
+            if abs(cur_time - 750.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 4)
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+                         
+            if abs(cur_time - 1000.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 5)
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+            
+            if abs(cur_time - 1250.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 6)
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+            
+            if abs(cur_time - 1500.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 7)
+                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
+                        cmap='jet', alpha=1.0, vmin=0, vmax=1)
+                         
+
+    plt.show()
+    
+def test():
+    body1 = body_2d_square(2.5, 100)
+    ep1 = diffusion_reaction_FN(body=body1)
+    ep1.sigma_f = 1e-4
+    ep1.sigma_s = 1e-4
+    ep1.init_Vm_w_experiment2()
+
+    tol_time = 1500
+    cnt = 10
+
+    n = 100
+    x = np.linspace(0, 2.5, n)
+    y = np.linspace(0, 2.5, n)
+    X, Y = np.meshgrid(x, y)
+    Z = np.zeros((n, n))
+
+    cur_time = 0.0
+    target_time = 0.0
+    sub_plot_row = 1
+    sub_plot_col = 7
+    if abs(cur_time - target_time) < 1e-6:
+        for idi in range(n):
+            for idj in range(n):
+                idv = idi * n + idj
+                Z[idi, idj] = ep1.Vm[idv]
+
+        plt.subplot(sub_plot_row, sub_plot_col, 1)        
+        plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                cmap='jet', alpha=1.0)
+    # plt.show()
+    # return
+    dt = 1.0 / cnt
+    for tt in range(tol_time):
+        for st in range(cnt):
+            ep1.update_Vm(dt)
+            cur_time += dt
+            if abs(cur_time - 250.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 2)                 
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
+                
+            if abs(cur_time - 500.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 3)
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
+
+            if abs(cur_time - 750.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 4)
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
+                         
+            if abs(cur_time - 1000.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 5)
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
+            
+            if abs(cur_time - 1250.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 6)
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
+            
+            if abs(cur_time - 1500.0) < 1e-6:
+                for idi in range(n):
+                    for idj in range(n):
+                        idv = idi * n + idj
+                        Z[idi, idj] = ep1.Vm[idv]
+
+                plt.subplot(sub_plot_row, sub_plot_col, 7)
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
+                        #  , vmin=0, vmax=1
+
+    plt.show()
+
+def test2():
+    body1 = body_2d_square(2.5, 100)
+    ep1 = diffusion_reaction_FN(body=body1)
+    ep1.sigma_f = 1e-4
+    ep1.sigma_s = 1e-4
+    ep1.init_Vm_w_experiment2()
+
+    tol_time = 3000
+    cnt = 10
+
+    n = 100
+    x = np.linspace(0, 2.5, n)
+    y = np.linspace(0, 2.5, n)
+    X, Y = np.meshgrid(x, y)
+    Z = np.zeros((n, n))
+
+    cur_time = 0.0
+    target_time = 0.0
+    sub_plot_row = 1
+    sub_plot_col = 7
+    if abs(cur_time - target_time) < 1e-6:
+        for idi in range(n):
+            for idj in range(n):
+                idv = idi * n + idj
+                Z[idi, idj] = ep1.Vm[idv]
+
+        plt.subplot(sub_plot_row, sub_plot_col, 1)        
+        plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                cmap='jet', alpha=1.0)
+    # plt.show()
+    # return
     dt = 1.0 / cnt
     for tt in range(tol_time):
         for st in range(cnt):
@@ -374,18 +573,16 @@ def experiment2():
                         idv = idi * n + idj
                         Z[idi, idj] = ep1.Vm[idv]
 
-                plt.subplot(2,3,2)                
-                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
-                        cmap='jet', alpha=1.0)  # , vmin=0, vmax=1
-                plt.colorbar()
-                # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
-                plt.show()
+                plt.subplot(sub_plot_row, sub_plot_col, 2)                 
+                plt.imshow(Z, extent=[0, 2.5, 0, 2.5], origin='lower',
+                        cmap='jet', alpha=1.0)
                 
-            
-    # plt.show()
-    
+    plt.show()
+
 
 if __name__ == "__main__":
     # ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
     ti.init(arch=ti.cpu)
-    experiment2()
+    # experiment2()
+    # test()
+    test2()
