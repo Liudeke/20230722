@@ -92,27 +92,14 @@ class diffusion_reaction_FN:
         self.Ke = ti.Matrix.field(3, 3, float, shape=(body.num_tet,))
         self.D = ti.Matrix.field(2, 2, float, shape=(body.num_tet,))
 
-        # For conjugate gradient method
-        self.cg_x = ti.field(float, self.body.num_vertex)
-        self.cg_Ax = ti.field(float, self.body.num_vertex)
-        self.cg_b = ti.field(float, self.body.num_vertex)
-        self.cg_r = ti.field(float, self.body.num_vertex)
-        self.cg_d = ti.field(float, self.body.num_vertex)
-        self.cg_Ad = ti.field(float, self.body.num_vertex)
-        self.pcg_M = ti.field(float, self.body.num_vertex)
-        self.pcg_s = ti.field(float, self.body.num_vertex)
-        self.cg_epsilon = 1.0e-3
-        # debug
-        self.cg_A = ti.field(float, shape=(self.body.num_vertex, self.body.num_vertex))
-
         # use API to solver cg
-        self.nva = self.body.n * self.body.n
-        self.nv = (self.body.n - 2) * (self.body.n - 2)
-        self.hash_v = ti.field(int, shape=(self.nv,))
-        self.hash_v_r = ti.field(int, shape=(self.nva,))
+        self.nv = self.body.n * self.body.n
+        self.nvb = (self.body.n - 2) * (self.body.n - 2)
+        self.hash_v = ti.field(int, shape=(self.nvb,))
+        self.hash_v_r = ti.field(int, shape=(self.nv,))
         self.init_hash()
-        self.api_A = ti.linalg.SparseMatrixBuilder(self.nv, self.nv, max_num_triplets=self.nv * self.nv * 20)
-        self.api_M = ti.linalg.SparseMatrixBuilder(self.nv, self.nv, max_num_triplets=self.nv * self.nv * 20)
+        self.api_A = ti.linalg.SparseMatrixBuilder(self.nv, self.nv, max_num_triplets=self.nv * self.nv * 7)
+        self.api_M = ti.linalg.SparseMatrixBuilder(self.nv, self.nv, max_num_triplets=self.nv * self.nv * 7)
         self.api_Vm = ti.ndarray(ti.f32, self.nv)
         self.api_b = ti.ndarray(ti.f32, self.nv)
 
@@ -173,9 +160,6 @@ class diffusion_reaction_FN:
 
     @ti.kernel
     def init_fiber(self):
-        # for i in range(self.body.num_tet):
-        #     self.body.tet_fiber[i] = tm.vec3([0., -1.0, 0.])
-        #     self.body.tet_sheet[i] = tm.vec3([1., 0., 0.])
         for i in range(self.body.num_tet):
             self.fiber[i] = self.F[i] @ self.body.tet_fiber[i]
             self.sheet[i] = self.F[i] @ self.body.tet_sheet[i]
@@ -277,6 +261,7 @@ class diffusion_reaction_FN:
         M = self.api_M.build()
         self.copy_Vm(self.api_Vm, self.Vm)
         self.api_b = M @ self.api_Vm
+        self.mod_b(self.api_b)
 
         solver = ti.linalg.SparseSolver(solver_type="LLT")
         solver.analyze_pattern(A)
@@ -294,9 +279,11 @@ class diffusion_reaction_FN:
             for n in ti.static(range(3)):
                 for m in ti.static(range(3)):
                     if self.body.is_dirichlet_bou[idx[n]] == 0 and self.body.is_dirichlet_bou[idx[m]] == 0:
-                        idvn = self.hash_v_r[idx[n]]
-                        idvm = self.hash_v_r[idx[m]]
-                        A[idvn, idvm] += (self.Me[i][n, m] + self.Ke[i][n, m] * dt)
+                        A[idx[n], idx[m]] += (self.Me[i][n, m] + self.Ke[i][n, m] * dt)
+
+        for i in range(self.nv):
+            if self.body.is_dirichlet_bou[i] == 1:
+                A[i, i] += 1
 
     @ti.kernel
     def assemble_M(self, M: ti.types.sparse_matrix_builder()):
@@ -307,20 +294,23 @@ class diffusion_reaction_FN:
                 idx[k] = elem[i][k]
             for n in ti.static(range(3)):
                 for m in ti.static(range(3)):
-                    if self.body.is_dirichlet_bou[idx[n]] == 0 and self.body.is_dirichlet_bou[idx[m]] == 0:
-                        idvn = self.hash_v_r[idx[n]]
-                        idvm = self.hash_v_r[idx[m]]
-                        M[idvn, idvm] += self.Me[i][n, m]
+                    M[idx[n], idx[m]] += self.Me[i][n, m]
 
     @ti.kernel
     def copy_Vm(self, des: ti.types.ndarray(), source: ti.template()):
+        for i in range(self.body.num_vertex):
+            des[i] = source[i]
+
+    @ti.kernel
+    def mod_b(self, des: ti.types.ndarray()):
         for i in range(self.nv):
-            des[i] = source[self.hash_v[i]]
+            if self.body.is_dirichlet_bou[i] == 1:
+                des[i] = 0.0
 
     @ti.kernel
     def updateVm_api(self, dv: ti.types.ndarray()):
         for i in dv:
-            self.Vm[self.hash_v[i]] = dv[i]
+            self.Vm[i] = dv[i]
 
 
     def update_Vm(self, dt):
@@ -339,7 +329,7 @@ class diffusion_reaction_FN:
                 self.Vm[i] = 0.0
             if x > 0 and x <= 1.25 and y >= 1.25 and y < 2.5:
                 self.w[i] = 0.1
-            elif x >= 1.25 and x < 2.5 and y > 0 and y < 2.5:
+            elif x >= 1.25 and x < 2.5 and y >= 1.25 and y < 2.5:
                 self.w[i] = 0.1
             else:
                 self.w[i] = 0.0
@@ -374,7 +364,6 @@ def experiment2():
         # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
 
     dt = 1.0 / cnt
-    flag = False
     for tt in range(tol_time):
         for st in range(cnt):
             ep1.update_Vm(dt)
@@ -391,10 +380,10 @@ def experiment2():
                 plt.colorbar()
                 # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
                 plt.show()
-                return
+                
             
     # plt.show()
-
+    
 
 if __name__ == "__main__":
     # ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
