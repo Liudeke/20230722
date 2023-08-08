@@ -165,7 +165,7 @@ class Body:
     def set_Vm(self):
         for i in self.Vm:
             self.Vm[i] = self.vertex[i][1] * 30.0
-            self.ver_Ta[i] = -0.5 * self.Vm[i]
+            self.ver_Ta[i] = 0.5 * self.Vm[i]
 
         for i in self.elements:
             id0, id1, id2, id3 = self.elements[i][0], self.elements[i][1], self.elements[i][2], self.elements[i][3]
@@ -181,8 +181,8 @@ class Body:
 @ti.data_oriented
 class XPBD_SNH_with_active:
     def __init__(self, body: Body, num_pts_np: np.ndarray,
-                 Youngs_modulus=1000.0, Poisson_ratio=0.49,
-                 dt=1. / 6., numSubsteps=5, numPosIters=10):
+                 Youngs_modulus=100.0, Poisson_ratio=0.49,
+                 dt=1. / 10., numSubsteps=1, numPosIters=10):
         self.body = body
         self.num_vertex = self.body.num_vertex
         self.num_element = self.body.num_tet
@@ -194,6 +194,7 @@ class XPBD_SNH_with_active:
         self.LameLa = Youngs_modulus * Poisson_ratio / ((1 + Poisson_ratio) * (1 - 2 * Poisson_ratio))
         self.LameMu = Youngs_modulus / (2 * (1 + Poisson_ratio))
         self.mass = ti.field(float, shape=(self.num_vertex,))
+        self.mass_weight = ti.field(float, shape=(self.num_vertex,))
         self.gravity = tm.vec3(0.0, 0.0, 0.0)
         self.f_ext = ti.Vector.field(3, float, shape=(self.num_vertex,))
         self.pos = self.body.vertex
@@ -213,6 +214,11 @@ class XPBD_SNH_with_active:
         self.tet_Ta = body.tet_Ta
         self.init()
 
+        self.vert_tol_vol = ti.field(float, shape=(self.num_vertex,))
+        self.vert_active_force = ti.Vector.field(3, float, shape=(self.num_vertex,))
+        self.dx_ = ti.Vector.field(3, float, shape=(self.num_vertex,))
+        self.Lagrange_multiplier = ti.field(float, shape=(self.num_element, 3))
+
         # self.vert_fiber = ti.Vector.field(3, float, shape=(self.num_vertex,))
         # self.vert_fiber.from_numpy(vert_fiber_np)
         # self.F = ti.Matrix.field(3, 3, float, shape=(self.num_element,))
@@ -229,6 +235,14 @@ class XPBD_SNH_with_active:
             for j in ti.static(range(4)):
                 eid = self.elements[i][j]
                 self.mass[eid] += pm
+        #         self.mass[eid] += pm * self.vol[i]
+        #         self.mass_weight[eid] += self.vol[i]
+        #
+        # for i in self.pos:
+        #     self.mass[i] /= self.mass_weight[i]
+
+        for i in self.pos:
+            self.mass[i] = 0.1
 
         for i in self.pos:
             self.invMass[i] = 1.0 / self.mass[i]
@@ -238,24 +252,90 @@ class XPBD_SNH_with_active:
             self.sub_step()
 
     def sub_step(self):
+        # self.cal_active_force()
         self.preSolve()
         self.solve_Gauss_Seidel_GPU()
         self.postSolve()
 
     @ti.kernel
+    def cal_active_force(self):
+        """
+            force = (d psi / d F) @ (d F / dx)
+            psi = Ta / 2 * (I_ff - 1)
+            (d psi) / (d F) = Ta * F @ f0 @ f0^T
+        """
+        pos, ir, tet = ti.static(self.pos, self.body.DmInv, self.elements)
+        for i in self.vert_active_force:
+            self.vert_active_force[i] = 0.0
+            self.vert_tol_vol[i] = 0.0
+
+        for i in self.elements:
+            vid = tm.ivec4(0, 0, 0, 0)
+            for j in ti.static(range(4)):
+                vid[j] = tet[i][j]
+            f0 = self.body.tet_fiber[i]
+            v1 = pos[vid[1]] - pos[vid[0]]
+            v2 = pos[vid[2]] - pos[vid[0]]
+            v3 = pos[vid[3]] - pos[vid[0]]
+            Ds = tm.mat3(v1, v2, v3)
+            Ds = Ds.transpose()
+            F = Ds @ ir[i]
+            f = F @ f0
+            dpsi = self.tet_Ta[i] * (f.outer_product(f0))
+            # print()
+            # print(self.tet_Ta[i])
+            dpsidx = ti.Matrix([[0., 0., 0.],
+                                [0., 0., 0.],
+                                [0., 0., 0.],
+                                [0., 0., 0.]], float)
+            tmp = tm.vec3(0., 0., 0.)
+            for j in ti.static(range(3)):
+                tmp[0] = 0.0
+                tmp[1] = 0.0
+                tmp[2] = 0.0
+                for m in ti.static(range(3)):
+                    tmp[0] += ir[i][j, m] * dpsi[0, m]
+                    tmp[1] += ir[i][j, m] * dpsi[1, m]
+                    tmp[2] += ir[i][j, m] * dpsi[2, m]
+                dpsidx[j + 1, 0] += tmp[0]
+                dpsidx[j + 1, 1] += tmp[1]
+                dpsidx[j + 1, 2] += tmp[2]
+                dpsidx[0, 0] -= tmp[0]
+                dpsidx[0, 1] -= tmp[1]
+                dpsidx[0, 2] -= tmp[2]
+
+            vol = F.determinant()
+            vol = abs(vol) / 6.0
+            # for j in ti.static(range(4)):
+            #     for m in ti.static(range(3)):
+            #         self.vert_active_force[vid[j]][m] -= dpsidx[j, m] * vol
+            #     self.vert_tol_vol[vid[j]] += vol
+            #     # print(self.vert_tol_vol[vid[j]], vol)
+
+            for j in ti.static(range(4)):
+                for m in ti.static(range(3)):
+                    self.vert_active_force[vid[j]][m] -= dpsidx[j, m] * vol
+
+        # for i in range(self.num_vertex):
+        #     self.vert_active_force[i] /= self.vert_tol_vol[i]
+
+    @ti.kernel
     def preSolve(self):
         pos, vel = ti.static(self.pos, self.vel)
         for i in self.f_ext:
+            # self.vert_active_force[i] = tm.vec3(0.0, -0.5 * self.body.ver_Ta[i], 0.0)
+            # self.f_ext[i] = self.gravity + self.vert_active_force[i]
             self.f_ext[i] = self.gravity
 
         for i in self.pos:
             self.prevPos[i] = pos[i]
             vel[i] += self.h * self.f_ext[i] * self.invMass[i]
             pos[i] += self.h * vel[i]
+            self.dx_[i] = pos[i] - self.prevPos[i]
 
-        # for i in self.elements:
-        #     for j in ti.static(range(3)):
-        #         self.Lagrange_multiplier[i, j] = 0.0
+        for i in self.elements:
+            for j in ti.static(range(3)):
+                self.Lagrange_multiplier[i, j] = 0.0
 
     @ti.kernel
     def postSolve(self):
@@ -288,8 +368,8 @@ class XPBD_SNH_with_active:
     def solve_dirichlet_boundary(self):
         for i in self.body.vertex:
             if self.body.bou_tag_dirichlet[i] == 1:
-                self.pos[i][1] = self.prevPos[i][1]
-                # self.pos[i] = self.prevPos[i]
+                # self.pos[i][1] = self.prevPos[i][1]
+                self.pos[i] = self.prevPos[i]
 
         # for i in self.body.bou_epi:
         #     id0, id1, id2 = self.body.bou_epi[i][0], self.body.bou_epi[i][1], self.body.bou_epi[i][2]
@@ -340,7 +420,7 @@ class XPBD_SNH_with_active:
             g[i, 3] += F_col2 * (r_s_inv * ir[i][2, 2])
 
             C = r_s
-            self.applyToElem(i, C, devCompliance)
+            self.applyToElem(i, C, devCompliance, 0)
 
             # det(F) = 1
             v1 = pos[id[1]] - pos[id[0]]
@@ -373,9 +453,9 @@ class XPBD_SNH_with_active:
 
             vol = F.determinant()
             C = vol - 1.0 - volCompliance / devCompliance
-            self.applyToElem(i, C, volCompliance)
+            self.applyToElem(i, C, volCompliance, 1)
 
-            # Iff = 1
+            Iff = 1
             v1 = pos[id[1]] - pos[id[0]]
             v2 = pos[id[2]] - pos[id[0]]
             v3 = pos[id[3]] - pos[id[0]]
@@ -391,26 +471,41 @@ class XPBD_SNH_with_active:
             dIff1 = tm.vec3(dIff[0, 1], dIff[1, 1], dIff[2, 1])
             dIff2 = tm.vec3(dIff[0, 2], dIff[1, 2], dIff[2, 2])
 
+            # g[i, 1] = tm.vec3(0., 0., 0.)
+            # g[i, 1] += dIff0 * (C_inv * ir[i][0, 0])
+            # g[i, 1] += dIff1 * (C_inv * ir[i][0, 1])
+            # g[i, 1] += dIff2 * (C_inv * ir[i][0, 2])
+            #
+            # g[i, 2] = tm.vec3(0., 0., 0.)
+            # g[i, 2] += dIff0 * (C_inv * ir[i][1, 0])
+            # g[i, 2] += dIff1 * (C_inv * ir[i][1, 1])
+            # g[i, 2] += dIff2 * (C_inv * ir[i][1, 2])
+            #
+            # g[i, 3] = tm.vec3(0., 0., 0.)
+            # g[i, 3] += dIff0 * (C_inv * ir[i][2, 0])
+            # g[i, 3] += dIff1 * (C_inv * ir[i][2, 1])
+            # g[i, 3] += dIff2 * (C_inv * ir[i][2, 2])
+
             g[i, 1] = tm.vec3(0., 0., 0.)
-            g[i, 1] += dIff0 * (C_inv * ir[i][0, 0])
-            g[i, 1] += dIff1 * (C_inv * ir[i][0, 1])
-            g[i, 1] += dIff2 * (C_inv * ir[i][0, 2])
+            g[i, 1] -= dIff0 * (C_inv * ir[i][0, 0])
+            g[i, 1] -= dIff1 * (C_inv * ir[i][0, 1])
+            g[i, 1] -= dIff2 * (C_inv * ir[i][0, 2])
 
             g[i, 2] = tm.vec3(0., 0., 0.)
-            g[i, 2] += dIff0 * (C_inv * ir[i][1, 0])
-            g[i, 2] += dIff1 * (C_inv * ir[i][1, 1])
-            g[i, 2] += dIff2 * (C_inv * ir[i][1, 2])
+            g[i, 2] -= dIff0 * (C_inv * ir[i][1, 0])
+            g[i, 2] -= dIff1 * (C_inv * ir[i][1, 1])
+            g[i, 2] -= dIff2 * (C_inv * ir[i][1, 2])
 
             g[i, 3] = tm.vec3(0., 0., 0.)
-            g[i, 3] += dIff0 * (C_inv * ir[i][2, 0])
-            g[i, 3] += dIff1 * (C_inv * ir[i][2, 1])
-            g[i, 3] += dIff2 * (C_inv * ir[i][2, 2])
+            g[i, 3] -= dIff0 * (C_inv * ir[i][2, 0])
+            g[i, 3] -= dIff1 * (C_inv * ir[i][2, 1])
+            g[i, 3] -= dIff2 * (C_inv * ir[i][2, 2])
 
             if self.body.tet_Ta[i] > 0:
-                self.applyToElem(i, C, 1.0 / self.body.tet_Ta[i])
+                self.applyToElem(i, C, 1.0 / self.body.tet_Ta[i], 2)
 
     @ti.func
-    def applyToElem(self, elemNr, C, compliance):
+    def applyToElem(self, elemNr, C, compliance, cid):
         g, pos, elem, h, invVol, invMass = ti.static(self.grads, self.pos, self.elements, self.h, self.invVol,
                                                      self.invMass)
         g[elemNr, 0] = tm.vec3(0., 0., 0.)
@@ -426,7 +521,9 @@ class XPBD_SNH_with_active:
         dlambda = 0.0
         if w != 0.0:
             alpha = compliance / h / h * invVol[elemNr]
-            dlambda = -C / (w + alpha)
+            dlambda = (0.0 - C - alpha * self.Lagrange_multiplier[elemNr, cid]) / (w + alpha)
+
+        self.Lagrange_multiplier[elemNr, cid] += dlambda
 
         # without proj
         for i in ti.static(range(4)):
@@ -477,8 +574,25 @@ def experiment3():
     body.set_Vm()
     body.get_dirichlet_bou()
 
+    # dynamics_sys.update()
+    # dynamics_sys.update()
+    # # print(dynamics_sys.vert_active_force)
+    #
+    # force_field = ti.Vector.field(3, float, shape=(dynamics_sys.num_vertex * 2, ))
+    # for i in range(dynamics_sys.num_vertex):
+    #     force_field[2 * i] = dynamics_sys.pos[i]
+    #     force_field[2 * i + 1] = force_field[2 * i] + dynamics_sys.vert_active_force[i]
+    pos_field = ti.Vector.field(3, float, shape=(dynamics_sys.num_vertex * 2, ))
+    for i in range(dynamics_sys.num_vertex):
+        pos_field[2 * i] = dynamics_sys.pos[i]
+
+    dynamics_sys.update()
+    for i in range(dynamics_sys.num_vertex):
+        pos_field[2 * i + 1] = dynamics_sys.pos[i]
+
     open_gui = True
     # open_gui = False
+    # print(dynamics_sys.mass)
     windowLength = 1024
     lengthScale = min(windowLength, 512)
     light_distance = lengthScale / 25.
@@ -495,6 +609,7 @@ def experiment3():
         camera.lookat(2.7179826, 1.31246826, 2.42507068)
         camera.up(0., 1., 0.)
 
+        iter_time = 0
         while window.running:
             dynamics_sys.update()
 
@@ -510,19 +625,201 @@ def experiment3():
             # draw
             # scene.particles(body.vertex, radius=0.02, color=(0, 1, 1))
             # scene.mesh(body.vertex, indices=body.surfaces, per_vertex_color=vert_color, two_sided=False)
+
             scene.mesh(body.vertex, indices=body.surfaces, two_sided=False, color=(0.5, 0.5, 0.5))
-            # scene.lines(vert_fiber_field, color=(0., 0.0, 1.), width=2.0)
-            # scene.lines(bou_endo_normal_field, per_vertex_color=bou_endo_normal_field_color, width=2.0)
+            # scene.lines(force_field, color=(0., 0.0, 1.), width=2.0)
+            # scene.lines(pos_field, color=(0., 0.0, 1.), width=2.0)
 
             # show the frame
             canvas.scene(scene)
             window.show()
+            # iter_time += 1
+            # if iter_time == 2:
+            #     window.running = False
 
         # print(camera.curr_position)
         # print(camera.curr_lookat)
         # print(camera.curr_up)
 
 
+def experiment3_1():
+    # 顶点位置
+    pos_np = np.array(meshData['verts'], dtype=float)
+    pos_np = pos_np.reshape((-1, 3))
+    # 四面体顶点索引
+    tet_np = np.array(meshData['tetIds'], dtype=int)
+    tet_np = tet_np.reshape((-1, 4))
+    # edge
+    edge_np = np.array(meshData['tetEdgeIds'], dtype=int)
+    edge_np = edge_np.reshape((-1, 2))
+    # surface tri index
+    # surf_tri_np = np.array(meshData['tetSurfaceTriIds'], dtype=int)
+    # surf_tri_np = surf_tri_np.reshape((-1, 3))
+    # tet_fiber方向
+    fiber_tet_np = np.array(meshData['fiberDirection'], dtype=float)
+    fiber_tet_np = fiber_tet_np.reshape((-1, 3))
+
+    # tet_sheet方向
+    sheet_tet_np = np.array(meshData['sheetDirection'], dtype=float)
+    sheet_tet_np = sheet_tet_np.reshape((-1, 3))
+    # num_edge_set
+    num_edge_set_np = np.array(meshData['num_edge_set'], dtype=int)[0]
+    # edge_set
+    edge_set_np = np.array(meshData['edge_set'], dtype=int)
+    # num_tet_set
+    num_tet_set_np = np.array(meshData['num_tet_set'], dtype=int)[0]
+    # tet_set
+    tet_set_np = np.array(meshData['tet_set'], dtype=int)
+    # bou_tag
+    bou_tag_dirichlet_np = np.array(meshData['bou_tag_dirichlet'], dtype=int)
+    bou_tag_neumann_np = np.array(meshData['bou_tag_neumann'], dtype=int)
+
+    body = Body(pos_np, tet_np, edge_np, fiber_tet_np, sheet_tet_np, num_edge_set_np, edge_set_np, num_tet_set_np,
+                tet_set_np, bou_tag_dirichlet_np, bou_tag_neumann_np)
+    body.get_fiber()
+
+    num_per_tet_set_np = np.array(meshData['sum_tet_set'], dtype=int)
+    dynamics_sys = XPBD_SNH_with_active(body=body, num_pts_np=num_per_tet_set_np)
+
+    # set experiment parameter
+    body.set_Vm()
+    body.get_dirichlet_bou()
+
+    np_vertex = body.vertex.to_numpy()
+    vert_path = '../output/experiment3/vert0.txt'
+    np.savetxt(vert_path, np_vertex, delimiter=",")
+
+    np_tet = body.elements.to_numpy()
+    tet_path = '../output/experiment3/elem0.txt'
+    np.savetxt(tet_path, np_tet, fmt="%d", delimiter=",")
+
+
+def experiment3_2():
+    # 顶点位置
+    pos_np = np.array(meshData['verts'], dtype=float)
+    pos_np = pos_np.reshape((-1, 3))
+    # 四面体顶点索引
+    tet_np = np.array(meshData['tetIds'], dtype=int)
+    tet_np = tet_np.reshape((-1, 4))
+    # edge
+    edge_np = np.array(meshData['tetEdgeIds'], dtype=int)
+    edge_np = edge_np.reshape((-1, 2))
+    # surface tri index
+    # surf_tri_np = np.array(meshData['tetSurfaceTriIds'], dtype=int)
+    # surf_tri_np = surf_tri_np.reshape((-1, 3))
+    # tet_fiber方向
+    fiber_tet_np = np.array(meshData['fiberDirection'], dtype=float)
+    fiber_tet_np = fiber_tet_np.reshape((-1, 3))
+
+    # tet_sheet方向
+    sheet_tet_np = np.array(meshData['sheetDirection'], dtype=float)
+    sheet_tet_np = sheet_tet_np.reshape((-1, 3))
+    # num_edge_set
+    num_edge_set_np = np.array(meshData['num_edge_set'], dtype=int)[0]
+    # edge_set
+    edge_set_np = np.array(meshData['edge_set'], dtype=int)
+    # num_tet_set
+    num_tet_set_np = np.array(meshData['num_tet_set'], dtype=int)[0]
+    # tet_set
+    tet_set_np = np.array(meshData['tet_set'], dtype=int)
+    # bou_tag
+    bou_tag_dirichlet_np = np.array(meshData['bou_tag_dirichlet'], dtype=int)
+    bou_tag_neumann_np = np.array(meshData['bou_tag_neumann'], dtype=int)
+
+    body = Body(pos_np, tet_np, edge_np, fiber_tet_np, sheet_tet_np, num_edge_set_np, edge_set_np, num_tet_set_np,
+                 tet_set_np, bou_tag_dirichlet_np, bou_tag_neumann_np)
+    body.get_fiber()
+
+    num_per_tet_set_np = np.array(meshData['sum_tet_set'], dtype=int)
+    dynamics_sys = XPBD_SNH_with_active(body=body, num_pts_np=num_per_tet_set_np)
+
+    # set experiment parameter
+    body.set_Vm()
+    body.get_dirichlet_bou()
+
+    # dynamics_sys.update()
+    # dynamics_sys.update()
+    # # print(dynamics_sys.vert_active_force)
+    #
+    # force_field = ti.Vector.field(3, float, shape=(dynamics_sys.num_vertex * 2, ))
+    # for i in range(dynamics_sys.num_vertex):
+    #     force_field[2 * i] = dynamics_sys.pos[i]
+    #     force_field[2 * i + 1] = force_field[2 * i] + dynamics_sys.vert_active_force[i]
+    # pos_field = ti.Vector.field(3, float, shape=(dynamics_sys.num_vertex * 2, ))
+    # for i in range(dynamics_sys.num_vertex):
+    #     pos_field[2 * i] = dynamics_sys.pos[i]
+
+    # dynamics_sys.update()
+    # for i in range(dynamics_sys.num_vertex):
+    #     pos_field[2 * i + 1] = dynamics_sys.pos[i]
+
+    open_gui = True
+    # open_gui = False
+    # print(dynamics_sys.mass)
+    windowLength = 1024
+    lengthScale = min(windowLength, 512)
+    light_distance = lengthScale / 25.
+
+    if open_gui:
+        # init the window, canvas, scene and camera
+        window = ti.ui.Window("body show", (windowLength, windowLength), vsync=True)
+        canvas = window.get_canvas()
+        scene = ti.ui.Scene()
+        camera = ti.ui.Camera()
+
+        # initial camera position
+        camera.position(3.41801597, 1.65656349, 3.05081163)
+        camera.lookat(2.7179826, 1.31246826, 2.42507068)
+        camera.up(0., 1., 0.)
+
+        iter_time = 0
+        while window.running:
+            dynamics_sys.update()
+
+            # set the camera, you can move around by pressing 'wasdeq'
+            camera.track_user_inputs(window, movement_speed=0.2, hold_key=ti.ui.LMB)
+            scene.set_camera(camera)
+
+            # set the light
+            scene.point_light(pos=(-light_distance, 0., light_distance), color=(0.5, 0.5, 0.5))
+            scene.point_light(pos=(light_distance, 0., light_distance), color=(0.5, 0.5, 0.5))
+            scene.ambient_light(color=(0.5, 0.5, 0.5))
+
+            # draw
+            # scene.particles(body.vertex, radius=0.02, color=(0, 1, 1))
+            # scene.mesh(body.vertex, indices=body.surfaces, per_vertex_color=vert_color, two_sided=False)
+
+            scene.mesh(body.vertex, indices=body.surfaces, two_sided=False, color=(0.5, 0.5, 0.5))
+            # scene.lines(force_field, color=(0., 0.0, 1.), width=2.0)
+            # scene.lines(pos_field, color=(0., 0.0, 1.), width=2.0)
+
+            # show the frame
+            canvas.scene(scene)
+            window.show()
+            # iter_time += 1
+            # if iter_time == 2:
+            #     window.running = False
+
+        # print(camera.curr_position)
+        # print(camera.curr_lookat)
+        # print(camera.curr_up)
+
+    np_vertex = body.vertex.to_numpy()
+    vert_path = '../output/experiment3/vert1.txt'
+    np.savetxt(vert_path, np_vertex, delimiter=",")
+
+    np_tet = body.elements.to_numpy()
+    tet_path = '../output/experiment3/elem1.txt'
+    np.savetxt(tet_path, np_tet, fmt="%d", delimiter=",")
+
+    np_Vm = body.Vm.to_numpy()
+    Vm_path = '../output/experiment3/Vm1.txt'
+    np.savetxt(Vm_path, np_Vm, delimiter=",")
+
+
 if __name__ == "__main__":
     ti.init(arch=ti.cuda, default_fp=ti.f64)
-    experiment3()
+    # experiment3()
+    # experiment3_1()
+    experiment3_2()
+

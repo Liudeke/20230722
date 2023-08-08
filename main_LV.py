@@ -50,13 +50,14 @@ def read_data():
                 tet_set_np, bou_tag_dirichlet_np, bou_tag_neumann_np, bou_endo_np, bou_epi_np)
     return Body_
 
-@ti.kernel
-def get_vert_fiber_field_LV1():
-    for i in body.vertex:
-        vert_fiber_field[2 * i] = body.vertex[i]
-        # vert_fiber = vert_fiber_taichi[i]
-        vert_fiber = tm.vec3(vert_fiber_taichi[i][1], vert_fiber_taichi[i][0], vert_fiber_taichi[i][2])
-        vert_fiber_field[2 * i + 1] = body.vertex[i] + vert_fiber
+
+# @ti.kernel
+# def get_vert_fiber_field_LV1():
+#     for i in body.vertex:
+#         vert_fiber_field[2 * i] = body.vertex[i]
+#         # vert_fiber = vert_fiber_taichi[i]
+#         vert_fiber = tm.vec3(vert_fiber_taichi[i][1], vert_fiber_taichi[i][0], vert_fiber_taichi[i][2])
+#         vert_fiber_field[2 * i + 1] = body.vertex[i] + vert_fiber
     # for i in body.elements:
     #     id0, id1, id2, id3 = body.elements[i][0], body.elements[i][1], body.elements[i][2], body.elements[i][3]
     #     fiber_field_vertex[2 * i] = body.vertex[id0] + body.vertex[id1] + body.vertex[id2] + body.vertex[id3]
@@ -111,7 +112,7 @@ if __name__ == "__main__":
     light_distance = lengthScale / 25.
 
     # for i in range(body.vertex.shape[0]):
-        # body.bou_tag_dirichlet[i] = 0
+    #     body.bou_tag_dirichlet[i] = 0
 
     vert_color = ti.Vector.field(3, float, shape=(body.num_vertex,))
     for i in range(vert_color.shape[0]):
