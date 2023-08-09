@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import time
 
+
 @ti.data_oriented
 class body_2d_square:
     def __init__(self, len_of_square: float, nv_of_row: int) -> None:
@@ -609,7 +610,8 @@ def example1_1():
                 plt.xlabel(r"$\mathrm{(f)}t_6=14$")
             
     plt.show()
-            
+
+
 def example1_2():
     body1 = body_2d_square(1, 100)
     ep1 = diffusion_reaction(body=body1)
