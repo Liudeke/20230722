@@ -508,7 +508,7 @@ def example1_1():
                 idv = idi * n + idj
                 Z[idi, idj] = ep1.Vm[idv]
 
-        plt.subplot(2,3,1)
+        plt.subplot(2, 3, 1)
         contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
         plt.clabel(contours, inline=True, fontsize=8)
         
@@ -517,7 +517,7 @@ def example1_1():
         plt.colorbar()
         plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
         plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
-        plt.xlabel(r"$\mathrm{(a)}t_1=0$")
+        # plt.xlabel(r"$\mathrm{(a)}t_1=0$")
 
     dt = 1.0 / cnt
     flag = False
@@ -531,7 +531,7 @@ def example1_1():
                         idv = idi * n + idj
                         Z[idi, idj] = ep1.Vm[idv]
 
-                plt.subplot(2,3,2)
+                plt.subplot(2, 3, 2)
                 contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
                 plt.clabel(contours, inline=True, fontsize=8)
 
@@ -540,7 +540,7 @@ def example1_1():
                 plt.colorbar()
                 plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
                 plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
-                plt.xlabel(r"$\mathrm{(b)}t_2=0.5$")
+                # plt.xlabel(r"$\mathrm{(b)}t_2=0.5$")
 
             if abs(cur_time - 2.5) < 1e-6:
                 for idi in range(n):
@@ -548,7 +548,7 @@ def example1_1():
                         idv = idi * n + idj
                         Z[idi, idj] = ep1.Vm[idv]
 
-                plt.subplot(2,3,3)
+                plt.subplot(2, 3, 3)
                 contours = plt.contour(X, Y, Z, 4, colors='black', linewidths=.5)
                 plt.clabel(contours, inline=True, fontsize=8)
 
@@ -557,7 +557,7 @@ def example1_1():
                 plt.colorbar()
                 plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
                 plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
-                plt.xlabel(r"$\mathrm{(c)}t_3=2.5$")
+                # plt.xlabel(r"$\mathrm{(c)}t_3=2.5$")
 
             if abs(cur_time - 7) < 1e-6:
                 for idi in range(n):
@@ -574,7 +574,7 @@ def example1_1():
                 plt.colorbar()
                 plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
                 plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
-                plt.xlabel(r"$\mathrm{(d)}t_4=7$")
+                # plt.xlabel(r"$\mathrm{(d)}t_4=7$")
 
             if abs(cur_time - 10.0) < 1e-6:
                 for idi in range(n):
@@ -591,7 +591,7 @@ def example1_1():
                 plt.colorbar()
                 plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
                 plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
-                plt.xlabel(r"$\mathrm{(e)}t_5=10$")
+                # plt.xlabel(r"$\mathrm{(e)}t_5=10$")
 
             if abs(cur_time - 14.0) < 1e-6:
                 for idi in range(n):
@@ -608,7 +608,7 @@ def example1_1():
                 plt.colorbar()
                 plt.plot(0.3, 0.7, 'ko', label='P', markersize=3.0)
                 plt.text(0.25, 0.72, "P", fontsize=12, color="black", weight="light", verticalalignment="center")
-                plt.xlabel(r"$\mathrm{(f)}t_6=14$")
+                # plt.xlabel(r"$\mathrm{(f)}t_6=14$")
             
     plt.show()
 
@@ -643,56 +643,60 @@ def example1_2():
 
     x_RV = np.array([0.0, 0.5, 2.5, 7.0, 10.0, 14.0])
     y_RV = np.array([0.0194, 0.248, 0.953, 0.8598, 0.481, 0.0])
-    plt.xlabel(r"$\mathrm{t}$")
-    plt.ylabel(r"$\mathrm{V_m}$")
+    plt.xlabel(r"$\mathrm{t}$", fontsize='large')
+    plt.ylabel(r"$\mathrm{V_m}$", fontsize='large')
     ax = plt.subplot(111)
     ax.plot(table_x, table_y, label='ours')
     ax.plot(x_RV, y_RV, 'o', label='Ratti')
-    ax.legend(loc='best')
+    ax.legend(loc='best', fontsize='large')
     # plt.plot(table_x, table_y, x_RV, y_RV, 'o')
     # plt.plot(x_RV, y_RV, 'o')
     plt.show()
 
+
 def test():
-    body1 = body_2d_square(2.5, 100)
+    body1 = body_2d_square(1, 100)
     ep1 = diffusion_reaction(body=body1)
-    ep1.sigma_f = 1.0e-1
-    ep1.sigma_s = 1.0e-1
-    ep1.epsilon_0 = 0.01
-    ep1.init_Vm_w_experiment2()
-    ep1.update_Vm(dt=1)
-    return
+    ep1.sigma_f = 1.0
+    ep1.sigma_s = 1.0
+    ep1.epsilon_0 = 0.034  # 0.035
+    ep1.init_Vm_w_example1()
 
-    tol_time = 100
-    cnt = 10
+    # ep1.get_near_vertex_index(x=0.3, y=0.7)
+    # return;
 
-    n = 100
-    x = np.linspace(0, 2.5, n)
-    y = np.linspace(0, 2.5, n)
-    X, Y = np.meshgrid(x, y)
-    Z = np.zeros((n, n))
+    # print(body1.vertex[6929])
+    id_vex = 6929
+    tol_time = 16
+    cnt = 20
+    table_x = np.linspace(0, tol_time, tol_time * cnt + 1)
+    vm = ep1.Vm[id_vex]
 
-    cur_time = 0.0
+    table_y = np.array(vm)
+
     dt = 1.0 / cnt
     for tt in range(tol_time):
         for st in range(cnt):
             ep1.update_Vm(dt)
-            cur_time += dt
-            if abs(cur_time - tol_time) < 1e-6:
-                for idi in range(n):
-                    for idj in range(n):
-                        idv = idi * n + idj
-                        Z[idi, idj] = ep1.Vm[idv]
+            # print(ep1.Vm[id_vex])
+            vm = ep1.Vm[id_vex]
+            table_y = np.append(table_y, vm)
 
-                plt.imshow(Z, extent=[0, 1, 0, 1], origin='lower',
-                        cmap='jet', alpha=1.0) #, vmin=0, vmax=1
-                plt.colorbar()
-            
-    plt.show()
+    x_RV = np.array([0.0, 0.5, 2.5, 7.0, 10.0, 14.0])
+    y_RV = np.array([0.0194, 0.248, 0.953, 0.8598, 0.481, 0.0])
+
+    npX = table_x
+    X_path = '../doc/experiment1/time.txt'
+    np.savetxt(X_path, npX, delimiter='\t')
+
+    npY = table_y
+    Y_path = '../doc/experiment1/Vm.txt'
+    np.savetxt(Y_path, npY, delimiter='\t')
+
 
 if __name__ == "__main__":
     # ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
     ti.init(arch=ti.cpu)
     # example1_1()
-    example1_2()
-    # test()
+    # example1_2()
+    test()
