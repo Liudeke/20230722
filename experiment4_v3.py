@@ -726,11 +726,14 @@ class XPBD_SNH_with_active:
         for i in self.elements:
             self.invVol[i] = 1. / self.vol[i]
             pm = self.vol[i] / 4.0 * self.body.density
+            vid = tm.ivec4([0, 0, 0, 0])
             for j in ti.static(range(4)):
-                eid = self.elements[i][j]
-                self.mass[eid] += pm
+                vid[j] = self.elements[i][j]
+                self.mass[vid[j]] += pm
 
         for i in self.pos:
+            if self.mass[i] == 0.0:
+                print(i)
             self.invMass[i] = 1.0 / self.mass[i]
 
     def update(self):
@@ -1129,7 +1132,7 @@ def experiment4_1():
         elif i == 290:
             ep_sys.apply_stimulation_s2_1()
         ep_sys.update(1)
-        if i == 0 or i == 290:
+        if i == 0 or i == 295:
             np_vertex = body.vertex.to_numpy()
             vert_path = './doc/experiment4/ex4_1/vert' + str(i) + 'txt'
             np.savetxt(vert_path, np_vertex, delimiter=",")
@@ -1407,7 +1410,7 @@ def experiment4_3():
     # origin_x_A = body.vertex[A_index][0]
     # origin_y_B = body.vertex[B_index][1]
     # origin_z_C = body.vertex[C_index][2]
-
+    #
     # table_x = np.linspace(0, tol_time, tol_time + 1)
     #
     # table_y_A = np.array(0.0)
@@ -1428,40 +1431,54 @@ def experiment4_3():
     #     table_y_B = np.append(table_y_B, y_B - origin_y_B)
     #     table_y_C = np.append(table_y_C, z_C - origin_z_C)
     #
+    # # # test
+    # # table_x = [1, 2, 3, 4, 5]
+    # # table_y_A = [3, 3, 3, 3, 3]
+    # # table_y_B = [4, 3, 1, 3, 6]
+    # # table_y_C = [5, 3, 2, 3, 10]
+    #
     # plt.xlabel(r"$\mathrm{t}$")
-    # plt.ylabel(r"$\mathrm{displacement}$")
-    # plt.plot(table_x, table_y_A, label="line 1")
-    # plt.plot(table_x, table_y_B, label="line 2")
-    # plt.plot(table_x, table_y_C, label="line 3")
-    # plt.legend()
+    # plt.ylabel(r"$\mathrm{Displacement(mm)}$", )
+    # plt.plot(table_x, table_y_A, 'g', label=r"$\mathrm{x_{disp}}$" + " at A", linestyle="--")
+    # plt.plot(table_x, table_y_B, 'b', label=r"$\mathrm{y_{disp}}$" + " at B", linestyle="-.")
+    # plt.plot(table_x, table_y_C, 'r', label=r"$\mathrm{z_{disp}}$" + " at C", linestyle=":")
+    # plt.legend(loc='upper right')
     # plt.show()
 
     # ------------ begin draw --------------- #
-    for i in range(tol_time):
-        if i == 0:
-            ep_sys.apply_stimulation_s1()
-        elif i == 290:
-            ep_sys.apply_stimulation_s2_1()
-        ep_sys.update(1)
-        dynamics_sys.update()
-        dynamics_sys.cal_von_Mises()
-        if i % 50 == 0:
-            np_vertex = body.vertex.to_numpy()
-            vert_path = './doc/experiment4/ex4_3/vert' + str(i) + 'txt'
-            np.savetxt(vert_path, np_vertex, delimiter=",")
-
-            np_tet = body.elements.to_numpy()
-            tet_path = './doc/experiment4/ex4_3/elem' + str(i) + 'txt'
-            np.savetxt(tet_path, np_tet, fmt="%d", delimiter=",")
-
-            np_Vm = body.Vm.to_numpy()
-            Vm_path = './doc/experiment4/ex4_3/Vm' + str(i) + 'txt'
-            np.savetxt(Vm_path, np_Vm, delimiter=",")
-
-            np_von_Mises = dynamics_sys.tet_von_Mises_stress.to_numpy()
-            von_Mises_path = './doc/experiment4/ex4_3/von_Mises' + str(i) + 'txt'
-            np.savetxt(von_Mises_path, np_von_Mises, delimiter=",")
+    # for i in range(tol_time):
+    #     if i == 0:
+    #         ep_sys.apply_stimulation_s1()
+    #     elif i == 290:
+    #         ep_sys.apply_stimulation_s2_1()
+    #     ep_sys.update(1)
+    #     dynamics_sys.update()
+    #     dynamics_sys.cal_von_Mises()
+    #     if i % 50 == 0:
+    #         np_vertex = body.vertex.to_numpy()
+    #         vert_path = './doc/experiment4/ex4_3/vert' + str(i) + '.txt'
+    #         np.savetxt(vert_path, np_vertex, delimiter=",")
+    #
+    #         np_tet = body.elements.to_numpy()
+    #         tet_path = './doc/experiment4/ex4_3/elem' + str(i) + '.txt'
+    #         np.savetxt(tet_path, np_tet, fmt="%d", delimiter=",")
+    #
+    #         np_Vm = body.Vm.to_numpy()
+    #         Vm_path = './doc/experiment4/ex4_3/Vm' + str(i) + '.txt'
+    #         np.savetxt(Vm_path, np_Vm, delimiter=",")
+    #
+    #         np_von_Mises = dynamics_sys.tet_von_Mises_stress.to_numpy()
+    #         von_Mises_path = './doc/experiment4/ex4_3/von_Mises' + str(i) + '.txt'
+    #         np.savetxt(von_Mises_path, np_von_Mises, delimiter=",")
     # ------------ end draw --------------- #
+
+    # test
+    ep_sys.apply_stimulation_s1()
+    ep_sys.update(1)
+    dynamics_sys.update()
+    np_vertex = body.vertex.to_numpy()
+    vert_path = './doc/experiment4/test/vert' + '.txt'
+    np.savetxt(vert_path, np_vertex, delimiter=",")
 
 
 if __name__ == "__main__":
