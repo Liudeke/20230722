@@ -486,6 +486,7 @@ def example1_1():
     ep1 = diffusion_reaction(body=body1)
     ep1.sigma_f = 1.0
     ep1.sigma_s = 1.0
+    ep1.epsilon_0 = 0.034
     ep1.init_Vm_w_example1()
 
     id_vex = 6929
@@ -617,6 +618,7 @@ def example1_2():
     ep1 = diffusion_reaction(body=body1)
     ep1.sigma_f = 1.0
     ep1.sigma_s = 1.0
+    ep1.epsilon_0 = 0.034  # 0.035
     ep1.init_Vm_w_example1()
 
     # ep1.get_near_vertex_index(x=0.3, y=0.7)
@@ -692,5 +694,5 @@ if __name__ == "__main__":
     # ti.init(arch=ti.cuda, default_fp=ti.f32, kernel_profiler=True, device_memory_fraction=0.9, device_memory_GB=4)
     ti.init(arch=ti.cpu)
     # example1_1()
-    # example1_2()
-    test()
+    example1_2()
+    # test()
